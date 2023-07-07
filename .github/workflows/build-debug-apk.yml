@@ -19,32 +19,32 @@ jobs:
     - name: checkout OsmAnd-resources
       uses: actions/checkout@v3
       with:
-        repository: osmandapp/OsmAnd-resources
+        repository: mnalis/OsmAnd-resources
         path: resources
     - name: checkout OsmAnd-core
       uses: actions/checkout@v3
       with:
-        repository: osmandapp/OsmAnd-core
+        repository: mnalis/OsmAnd-core
         path: core
     - name: checkout OsmAnd-core-legacy
       uses: actions/checkout@v3
       with:
-        repository: osmandapp/OsmAnd-core-legacy
+        repository: mnalis/OsmAnd-core-legacy
         path: core-legacy
     - name: checkout OsmAnd-build
       uses: actions/checkout@v3
       with:
-        repository: osmandapp/OsmAnd-build
+        repository: mnalis/OsmAnd-build
         path: build
     - name: checkout OsmAnd-tools
       uses: actions/checkout@v3
       with:
-        repository: osmandapp/OsmAnd-tools
+        repository: mnalis/OsmAnd-tools
         path: tools
     - name: checkout OsmAnd-misc
       uses: actions/checkout@v3
       with:
-        repository: osmandapp/OsmAnd-misc
+        repository: mnalis/OsmAnd-misc
         path: misc
 
     - name: set up JDK 11
