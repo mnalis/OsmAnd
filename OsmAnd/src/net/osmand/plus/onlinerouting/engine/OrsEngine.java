@@ -5,12 +5,15 @@ import androidx.annotation.Nullable;
 
 import net.osmand.Location;
 import net.osmand.data.LatLon;
+import net.osmand.gpx.GPXFile;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.onlinerouting.EngineParameter;
 import net.osmand.plus.onlinerouting.VehicleType;
 import net.osmand.plus.routing.RouteDirectionInfo;
+import net.osmand.router.RouteCalculationProgress;
 import net.osmand.router.TurnType;
+import net.osmand.shared.gpx.GpxFile;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -128,6 +131,11 @@ public class OrsEngine extends JsonOnlineRoutingEngine {
 		return jsonBody.toString();
 	}
 
+	@Override
+	public OnlineRoutingResponse responseByGpxFile(@NonNull OsmandApplication app, @NonNull GpxFile gpxFile, boolean initialCalculation, @Nullable RouteCalculationProgress calculationProgress) {
+		return null;
+	}
+
 	@Nullable
 	@Override
 	public OnlineRoutingResponse parseServerResponse(@NonNull JSONObject root,
@@ -163,7 +171,6 @@ public class OrsEngine extends JsonOnlineRoutingEngine {
 				// create direction step
 				RouteDirectionInfo direction = new RouteDirectionInfo(averageSpeed, turnType);
 				direction.routePointOffset = routePointOffset;
-				direction.routeEndPointOffset = routeEndPointOffset;
 				direction.setDescriptionRoute(instruction);
 				direction.setStreetName(streetName);
 				direction.setDistance((int) Math.round(distance));

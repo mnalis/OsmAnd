@@ -1,5 +1,9 @@
 package net.osmand.plus.views.mapwidgets.configure.dialogs;
 
+import static net.osmand.plus.settings.fragments.BaseSettingsFragment.APP_MODE_KEY;
+import static net.osmand.plus.views.mapwidgets.MapWidgetRegistry.*;
+import static net.osmand.plus.views.mapwidgets.MapWidgetRegistry.MATCHING_PANELS_MODE;
+
 import android.content.Context;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -9,6 +13,15 @@ import android.view.ViewGroup;
 import android.widget.CompoundButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+
+import androidx.annotation.DrawableRes;
+import androidx.annotation.IdRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentActivity;
+import androidx.fragment.app.FragmentManager;
 
 import com.google.android.material.snackbar.Snackbar;
 
@@ -23,13 +36,12 @@ import net.osmand.plus.utils.UiUtilities;
 import net.osmand.plus.views.layers.MapInfoLayer;
 import net.osmand.plus.views.mapwidgets.MapWidgetInfo;
 import net.osmand.plus.views.mapwidgets.MapWidgetRegistry;
-import net.osmand.plus.views.mapwidgets.WidgetInfoCreator;
 import net.osmand.plus.views.mapwidgets.MapWidgetsFactory;
 import net.osmand.plus.views.mapwidgets.WidgetGroup;
+import net.osmand.plus.views.mapwidgets.WidgetInfoCreator;
 import net.osmand.plus.views.mapwidgets.WidgetType;
 import net.osmand.plus.views.mapwidgets.WidgetsPanel;
 import net.osmand.plus.views.mapwidgets.banner.WidgetPromoBanner;
-import net.osmand.plus.views.mapwidgets.banner.WidgetPromoBanner.WidgetData;
 import net.osmand.plus.views.mapwidgets.configure.WidgetIconsHelper;
 import net.osmand.plus.views.mapwidgets.configure.panel.WidgetsConfigurationChangeListener;
 import net.osmand.plus.views.mapwidgets.configure.settings.WidgetSettingsBaseFragment;
@@ -43,20 +55,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import androidx.annotation.DrawableRes;
-import androidx.annotation.IdRes;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.StringRes;
-import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentActivity;
-import androidx.fragment.app.FragmentManager;
-
 public class WidgetInfoFragment extends BaseWidgetFragment implements WidgetsConfigurationChangeListener {
 
 	public static final String TAG = WidgetInfoFragment.class.getSimpleName();
 
-	private static final String APP_MODE_KEY = "app_mode";
 	private static final String WIDGET_ID_KEY = "widget_id";
 
 	private MapWidgetRegistry widgetRegistry;
@@ -111,8 +113,8 @@ public class WidgetInfoFragment extends BaseWidgetFragment implements WidgetsCon
 			throw new IllegalStateException("Failed to find widget by id: " + widgetId);
 		}
 		widgetType = widgetInfo.getWidgetType();
-		widgetGroup = widgetType == null ? null : widgetType.getGroup();
-		panel = widgetInfo.widgetPanel;
+		panel = widgetInfo.getWidgetPanel();
+		widgetGroup = widgetType == null ? null : widgetType.getGroup(panel);
 	}
 
 	private void setupToolbar() {
@@ -188,16 +190,15 @@ public class WidgetInfoFragment extends BaseWidgetFragment implements WidgetsCon
 	}
 
 	private void setupPromoBanner() {
-		MapActivity activity = getMapActivity();
+		MapActivity activity = requireMapActivity();
 		ViewGroup bannerContainer = view.findViewById(R.id.promo_banner_container);
 		View widgetContainer = view.findViewById(R.id.widget_item);
 		bannerContainer.setVisibility(View.VISIBLE);
 		widgetContainer.setVisibility(View.GONE);
 		bannerContainer.removeAllViews();
 
-		WidgetData widgetData = new WidgetData(widgetType.titleId, widgetType.dayIconId, widgetType.nightIconId);
-		WidgetPromoBanner banner = new WidgetPromoBanner(requireMapActivity(), widgetData, false);
-		bannerContainer.addView(banner.build(activity));
+		WidgetPromoBanner banner = new WidgetPromoBanner(activity, widgetType, false);
+		bannerContainer.addView(banner.build());
 	}
 
 	private void setupSecondaryDescription() {
@@ -259,8 +260,8 @@ public class WidgetInfoFragment extends BaseWidgetFragment implements WidgetsCon
 	}
 
 	private void openSettingsFragment() {
-		WidgetSettingsBaseFragment settingsFragment = widgetType == null ? null : widgetType.getSettingsFragment(app);
-		if (settingsFragment == null) {
+		WidgetSettingsBaseFragment fragment = widgetType == null ? null : widgetType.getSettingsFragment(app, widgetInfo);
+		if (fragment == null) {
 			throw new IllegalStateException("Widget has no available settings");
 		}
 
@@ -271,7 +272,7 @@ public class WidgetInfoFragment extends BaseWidgetFragment implements WidgetsCon
 			args.putString(APP_MODE_KEY, appMode.getStringKey());
 			args.putString(WIDGET_ID_KEY, widgetInfo.key);
 
-			WidgetSettingsBaseFragment.showFragment(fragmentManager, args, this, settingsFragment);
+			WidgetSettingsBaseFragment.showFragment(fragmentManager, args, fragment, this);
 		}
 	}
 
@@ -282,7 +283,7 @@ public class WidgetInfoFragment extends BaseWidgetFragment implements WidgetsCon
 			return null;
 		}
 
-		int filter = MapWidgetRegistry.ENABLED_MODE;
+		int filter = ENABLED_MODE | MATCHING_PANELS_MODE;
 		List<WidgetsPanel> panels = Collections.singletonList(panel);
 		List<MapWidgetInfo> widgetInfos = new ArrayList<>(widgetRegistry.getWidgetsForPanel(mapActivity, appMode, filter, panels));
 
@@ -292,16 +293,17 @@ public class WidgetInfoFragment extends BaseWidgetFragment implements WidgetsCon
 		}
 
 		String duplicateId = WidgetType.getDuplicateWidgetId(widgetType);
-
+		MapWidget duplicateWidget = new MapWidgetsFactory(mapActivity).createMapWidget(duplicateId, widgetType, panel);
+		WidgetInfoCreator creator = new WidgetInfoCreator(app, appMode);
+		MapWidgetInfo duplicateWidgetInfo = creator.askCreateWidgetInfo(duplicateId, duplicateWidget, widgetType, panel);
+		if (duplicateWidgetInfo == null) {
+			return null;
+		}
 		settings.CUSTOM_WIDGETS_KEYS.addModeValue(appMode, duplicateId);
 		WidgetState widgetState = widgetInfo.getWidgetState();
 		if (widgetState != null) {
 			widgetState.copyPrefs(appMode, duplicateId);
 		}
-		MapWidget duplicateWidget = new MapWidgetsFactory(mapActivity).createMapWidget(duplicateId, widgetType);
-		WidgetInfoCreator creator = new WidgetInfoCreator(app, appMode);
-		MapWidgetInfo duplicateWidgetInfo = creator.createCustomWidgetInfo(
-				duplicateId, duplicateWidget, widgetType, panel);
 		duplicateWidgetInfo.enableDisableForMode(appMode, true);
 		widgetInfo.widget.copySettings(appMode, duplicateId);
 
@@ -340,7 +342,7 @@ public class WidgetInfoFragment extends BaseWidgetFragment implements WidgetsCon
 		MapActivity mapActivity = getMapActivity();
 		if (mapActivity != null) {
 			List<MapWidgetInfo> widgetInfos = new ArrayList<>(widgetRegistry.getWidgetsForPanel(mapActivity,
-					appMode, 0, Collections.singletonList(panel)));
+					appMode, MATCHING_PANELS_MODE, Collections.singletonList(panel)));
 			for (MapWidgetInfo widgetInfo : widgetInfos) {
 				if (widgetInfo.key.equals(duplicateId)) {
 					this.widgetInfo = widgetInfo;
@@ -433,7 +435,7 @@ public class WidgetInfoFragment extends BaseWidgetFragment implements WidgetsCon
 			WidgetType widgetType = widgetInfo.widget.getWidgetType();
 			switch (this) {
 				case SETTINGS:
-					return widgetType != null && widgetType.getSettingsFragment(ctx) != null;
+					return widgetType != null && widgetType.getSettingsFragment(ctx, widgetInfo) != null;
 				case DUPLICATE:
 					return widgetType != null && widgetType.isPurchased(ctx);
 				case REMOVE:

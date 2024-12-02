@@ -1,9 +1,11 @@
 package net.osmand.plus.plugins.externalsensors.dialogs;
 
+import static net.osmand.plus.plugins.externalsensors.devices.sensors.DeviceChangeableProperty.NAME;
+
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Bundle;
 import android.provider.Settings;
+import android.text.SpannableString;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -26,18 +28,19 @@ import net.osmand.plus.plugins.externalsensors.devices.AbstractDevice;
 import net.osmand.plus.plugins.externalsensors.devices.AbstractDevice.DeviceListener;
 import net.osmand.plus.plugins.externalsensors.devices.DeviceConnectionResult;
 import net.osmand.plus.plugins.externalsensors.devices.sensors.AbstractSensor;
+import net.osmand.plus.plugins.externalsensors.devices.sensors.DeviceChangeableProperty;
 import net.osmand.plus.plugins.externalsensors.devices.sensors.SensorData;
-import net.osmand.plus.plugins.externalsensors.dialogs.EditDeviceNameDialog.OnSaveSensorNameCallback;
+import net.osmand.plus.plugins.externalsensors.dialogs.EditDevicePropertyDialog.OnSaveSensorPropertyCallback;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.UiUtilities;
-import net.osmand.plus.widgets.dialogbutton.DialogButtonType;
 import net.osmand.plus.widgets.dialogbutton.DialogButton;
+import net.osmand.plus.widgets.dialogbutton.DialogButtonType;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class ExternalDevicesListFragment extends ExternalDevicesBaseFragment implements FoundDevicesMenuListener,
-		DeviceListener, OnSaveSensorNameCallback {
+		DeviceListener, OnSaveSensorPropertyCallback, ForgetDeviceDialog.ForgetDeviceListener {
 
 	public static final String TAG = ExternalDevicesListFragment.class.getSimpleName();
 	protected View dividerBeforeButton;
@@ -75,16 +78,18 @@ public class ExternalDevicesListFragment extends ExternalDevicesBaseFragment imp
 		ImageView sensorIcon = view.findViewById(R.id.sensor_icon);
 		sensorIcon.setBackgroundResource(nightMode ? R.drawable.bg_empty_external_device_list_icon_night : R.drawable.bg_empty_external_device_list_icon_day);
 		sensorIcon.setImageResource(nightMode ? R.drawable.img_help_sensors_night : R.drawable.img_help_sensors_day);
-		TextView learnMore = view.findViewById(R.id.learn_more_button);
+
 		String docsLinkText = app.getString(R.string.learn_more_about_sensors_link);
-		UiUtilities.setupClickableText(app, learnMore, docsLinkText, docsLinkText, nightMode, unused -> {
+		SpannableString spannable = UiUtilities.createClickableSpannable(docsLinkText, docsLinkText, unused -> {
 			FragmentActivity activity = getActivity();
 			if (activity != null) {
-				boolean nightMode = !app.getSettings().isLightContent();
 				AndroidUtils.openUrl(activity, Uri.parse(getString(R.string.docs_external_sensors)), nightMode);
 			}
 			return false;
 		});
+		TextView learnMore = view.findViewById(R.id.learn_more_button);
+		UiUtilities.setupClickableText(learnMore, spannable, nightMode);
+
 		setupPairSensorButton(view.findViewById(R.id.pair_btn_empty));
 		setupPairSensorButton(view.findViewById(R.id.pair_btn_additional));
 		setupOpenBtSettingsButton(view.findViewById(R.id.bt_settings_button_container));
@@ -196,8 +201,8 @@ public class ExternalDevicesListFragment extends ExternalDevicesBaseFragment imp
 		} else {
 			app.runInUIThread(() -> {
 				appBar.setExpanded(false, false);
-				connectedListAdapter.setItems(connectedDevices);
-				disconnectedListAdapter.setItems(disconnectedDevices);
+				connectedListAdapter.setItems(new ArrayList<>(connectedDevices));
+				disconnectedListAdapter.setItems(new ArrayList<>(disconnectedDevices));
 				contentView.setVisibility(View.VISIBLE);
 				emptyView.setVisibility(View.GONE);
 				boolean hasConnectedDevices = connectedDevices.size() > 0;
@@ -238,28 +243,26 @@ public class ExternalDevicesListFragment extends ExternalDevicesBaseFragment imp
 
 	@Override
 	public void onRename(@NonNull AbstractDevice<?> device) {
-		EditDeviceNameDialog.showInstance(requireActivity(), this, device);
+		EditDevicePropertyDialog.showInstance(requireActivity(), this, device, NAME);
 	}
 
 	@Override
 	public void onForget(@NonNull AbstractDevice<?> device) {
-		ForgetDeviceDialog fragment = new ForgetDeviceDialog();
-		Bundle args = new Bundle();
-		args.putString(ForgetDeviceDialog.DEVICE_ID_KEY, device.getDeviceId());
-		fragment.setArguments(args);
-		fragment.setTargetFragment(this, 0);
-		fragment.show(requireActivity().getSupportFragmentManager(), ForgetDeviceDialog.TAG);
+		ForgetDeviceDialog.Companion.showInstance(requireActivity().getSupportFragmentManager(), this, device.getDeviceId());
 	}
 
+	@Override
 	public void onForgetSensorConfirmed(@NonNull AbstractDevice<?> device) {
 		plugin.unpairDevice(device);
 		updatePairedSensorsList();
 	}
 
 	@Override
-	public void changeSensorName(@NonNull String sensorId, @NonNull String newName) {
-		plugin.changeDeviceName(sensorId, newName);
-		updatePairedSensorsList();
+	public void changeSensorPropertyValue(@NonNull String sensorId, @NonNull DeviceChangeableProperty property, @NonNull String newName) {
+		if (property == NAME) {
+			plugin.changeDeviceName(sensorId, newName);
+			updatePairedSensorsList();
+		}
 	}
 
 	@Override

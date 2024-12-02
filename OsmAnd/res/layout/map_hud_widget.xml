@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-	xmlns:osmand="http://schemas.android.com/apk/res-auto"
+	xmlns:app="http://schemas.android.com/apk/res-auto"
 	xmlns:tools="http://schemas.android.com/tools"
 	android:id="@+id/widget_bg"
 	android:layout_width="match_parent"
@@ -27,7 +27,7 @@
 				android:layout_gravity="center"
 				android:layout_marginTop="2dp"
 				android:gravity="center"
-				android:textColor="@color/color_black"
+				android:textColor="@color/activity_background_color_dark"
 				android:textSize="@dimen/map_widget_text_size"
 				android:visibility="gone" />
 
@@ -39,7 +39,7 @@
 				android:layout_marginTop="2dp"
 				android:gravity="center"
 				android:visibility="gone"
-				osmand:srcCompat="@drawable/ic_action_remove_dark" />
+				app:srcCompat="@drawable/ic_action_remove_dark" />
 		</FrameLayout>
 
 		<LinearLayout
@@ -59,7 +59,7 @@
 				android:layout_marginEnd="@dimen/map_widget_icon_margin"
 				android:layout_marginRight="@dimen/map_widget_icon_margin"
 				android:gravity="center"
-				osmand:srcCompat="@drawable/ic_action_remove_dark" />
+				app:srcCompat="@drawable/ic_action_remove_dark" />
 
 			<FrameLayout
 				android:layout_width="wrap_content"
@@ -79,7 +79,7 @@
 						android:layout_marginEnd="@dimen/map_widget_icon_margin"
 						android:maxLines="1"
 						android:minWidth="10dp"
-						android:textColor="@color/color_white"
+						android:textColor="@color/card_and_list_background_light"
 						android:textSize="@dimen/map_widget_text_size"
 						tools:text="1048" />
 
@@ -91,7 +91,7 @@
 						android:layout_marginStart="4dp"
 						android:layout_toEndOf="@+id/widget_text_shadow"
 						android:maxLines="1"
-						android:textColor="@color/color_white"
+						android:textColor="@color/card_and_list_background_light"
 						android:textSize="@dimen/map_widget_text_size_small"
 						tools:text="km" />
 				</RelativeLayout>
@@ -107,7 +107,7 @@
 						android:layout_marginEnd="@dimen/map_widget_icon_margin"
 						android:maxLines="1"
 						android:minWidth="10dp"
-						android:textColor="@color/color_black"
+						android:textColor="@color/activity_background_color_dark"
 						android:textSize="@dimen/map_widget_text_size"
 						tools:text="1048" />
 
@@ -119,7 +119,7 @@
 						android:layout_marginStart="4dp"
 						android:layout_toEndOf="@+id/widget_text"
 						android:maxLines="1"
-						android:textColor="@color/color_black"
+						android:textColor="@color/activity_background_color_dark"
 						android:textSize="@dimen/map_widget_text_size_small"
 						tools:text="km" />
 				</RelativeLayout>

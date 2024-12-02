@@ -1,20 +1,22 @@
 package net.osmand.plus.utils;
 
 import android.graphics.Bitmap;
+import android.graphics.Bitmap.Config;
 import android.graphics.PointF;
+import android.os.AsyncTask;
 import android.util.Pair;
 
-import androidx.annotation.ColorInt;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
+import net.osmand.OnResultCallback;
+import net.osmand.core.android.MapRendererContext;
 import net.osmand.core.android.MapRendererView;
 import net.osmand.core.jni.AreaI;
 import net.osmand.core.jni.ColorARGB;
 import net.osmand.core.jni.FColorARGB;
 import net.osmand.core.jni.FColorRGB;
+import net.osmand.core.jni.IconData;
+import net.osmand.core.jni.OsmAndCore;
 import net.osmand.core.jni.PointI;
-import net.osmand.core.jni.SWIGTYPE_p_sk_spT_SkImage_const_t;
+import net.osmand.core.jni.SingleSkImage;
 import net.osmand.core.jni.SwigUtilities;
 import net.osmand.core.jni.TileId;
 import net.osmand.core.jni.TileIdList;
@@ -23,17 +25,24 @@ import net.osmand.data.LatLon;
 import net.osmand.data.QuadRect;
 import net.osmand.data.RotatedTileBox;
 import net.osmand.plus.plugins.weather.OfflineForecastHelper;
+import net.osmand.plus.utils.HeightsResolverTask.HeightsResolverCallback;
+import net.osmand.plus.views.corenative.NativeCoreContext;
 import net.osmand.util.MapAlgorithms;
 import net.osmand.util.MapUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 public class NativeUtilities {
 
 	public static final int MIN_ALTITUDE_VALUE = -20_000;
 
-	public static SWIGTYPE_p_sk_spT_SkImage_const_t createSkImageFromBitmap(@NonNull Bitmap inputBmp) {
+	public static SingleSkImage createSkImageFromBitmap(@NonNull Bitmap inputBmp) {
 		return SwigUtilities.createSkImageARGB888With(
 				inputBmp.getWidth(), inputBmp.getHeight(), AndroidUtils.getByteArrayFromBitmap(inputBmp));
 	}
@@ -57,14 +66,14 @@ public class NativeUtilities {
 		int r = (color >> 16) & 0xFF;
 		int g = (color >> 8) & 0xFF;
 		int b = (color) & 0xFF;
-		return new ColorARGB((short)a, (short)r , (short)g, (short)b);
+		return new ColorARGB((short) a, (short) r, (short) g, (short) b);
 	}
 
 	public static ColorARGB createColorARGB(@ColorInt int color, int alpha) {
 		int r = (color >> 16) & 0xFF;
 		int g = (color >> 8) & 0xFF;
 		int b = (color) & 0xFF;
-		return new ColorARGB((short)alpha, (short)r , (short)g, (short)b);
+		return new ColorARGB((short) alpha, (short) r, (short) g, (short) b);
 	}
 
 	public static boolean isSegmentCrossingPolygon(@NonNull PointI start31,
@@ -105,9 +114,9 @@ public class NativeUtilities {
 		return Math.max(a, c) <= Math.min(b, d);
 	}
 
-	public static int getSignedArea31(@NonNull PointI a31, @NonNull PointI b31, @NonNull PointI c31) {
-		return (b31.getX() - a31.getX()) * (c31.getY() - a31.getY())
-				- (b31.getY() - a31.getY()) * (c31.getX() - a31.getX());
+	public static long getSignedArea31(@NonNull PointI a31, @NonNull PointI b31, @NonNull PointI c31) {
+		return (long) (b31.getX() - a31.getX()) * (c31.getY() - a31.getY())
+				- (long) (b31.getY() - a31.getY()) * (c31.getX() - a31.getX());
 	}
 
 	public static boolean isPointInsidePolygon(@NonNull LatLon latLon, @NonNull List<PointI> polygon31) {
@@ -276,6 +285,22 @@ public class NativeUtilities {
 		return latLon;
 	}
 
+	public static void getAltitudeForLatLon(@Nullable MapRendererView mapRenderer, @Nullable LatLon latLon,
+	                                        @NonNull OnResultCallback<Double> callback) {
+		if (latLon != null) {
+			Double altitude = getAltitudeForLatLon(mapRenderer, latLon);
+			if (altitude != null) {
+				callback.onResult(altitude);
+			} else {
+				HeightsResolverCallback heightsCallback = heights -> callback.onResult(heights != null && heights.length > 0 ? (double) heights[0] : null);
+				HeightsResolverTask task = new HeightsResolverTask(Collections.singletonList(latLon), heightsCallback);
+				task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+			}
+		} else {
+			callback.onResult(null);
+		}
+	}
+
 	public static Double getAltitudeForLatLon(@Nullable MapRendererView mapRenderer, @Nullable LatLon latLon) {
 		if (latLon != null) {
 			return getAltitudeForLatLon(mapRenderer, latLon.getLatitude(), latLon.getLongitude());
@@ -398,6 +423,33 @@ public class NativeUtilities {
 		return target31;
 	}
 
+	@NonNull
+	public static PointI calculateNewTarget31(@NonNull PointI currentTarget31, @NonNull PointI offset31) {
+		int deltaX = offset31.getX();
+		int deltaY = offset31.getY();
+		int nextTargetX = currentTarget31.getX();
+		int nextTargetY = currentTarget31.getY();
+		if (Integer.MAX_VALUE - nextTargetX < deltaX) {
+			deltaX -= Integer.MAX_VALUE;
+			deltaX--;
+		}
+		if (Integer.MAX_VALUE - nextTargetY < deltaY) {
+			deltaY -= Integer.MAX_VALUE;
+			deltaY--;
+		}
+		nextTargetX += deltaX;
+		nextTargetY += deltaY;
+		if (nextTargetX < 0) {
+			nextTargetX += Integer.MAX_VALUE;
+			nextTargetX++;
+		}
+		if (nextTargetY < 0) {
+			nextTargetY += Integer.MAX_VALUE;
+			nextTargetY++;
+		}
+		return new PointI(nextTargetX, nextTargetY);
+	}
+
 	public static boolean containsLatLon(@Nullable MapRendererView mapRenderer, @NonNull RotatedTileBox tileBox,
 	                                     @NonNull LatLon latLon) {
 		return containsLatLon(mapRenderer, tileBox, latLon.getLatitude(), latLon.getLongitude());
@@ -423,6 +475,23 @@ public class NativeUtilities {
 		int x31 = MapUtils.get31TileNumberX(lon);
 		int y31 = MapUtils.get31TileNumberY(lat);
 		return new PointI(x31, y31);
+	}
+
+	public static float getLocationHeightOrZero(@NonNull MapRendererView mapRenderer, @NonNull PointI location31, @NonNull LatLon location, boolean readGeotiff) {
+		float height = mapRenderer.getLocationHeightInMeters(location31);
+		if (height > MIN_ALTITUDE_VALUE) {
+			return height;
+		} else if (readGeotiff) {
+			MapRendererContext mapRendererContext = NativeCoreContext.getMapRendererContext();
+			if (mapRendererContext != null) {
+				List<LatLon> locations = new ArrayList<LatLon>();
+				locations.add(location);
+				float[] heights = mapRendererContext.calculateHeights(locations);
+				if (heights != null && heights.length > 0)
+					return heights[0];
+			}
+		}
+		return 0.0f;
 	}
 
 	@Nullable
@@ -472,5 +541,12 @@ public class NativeUtilities {
 					OfflineForecastHelper.getTileY(tileId)));
 		}
 		return qTileIds;
+	}
+
+	@Nullable
+	public static Bitmap createBitmap(@NonNull IconData iconData) {
+		Bitmap bitmap = Bitmap.createBitmap(iconData.getWidth(), iconData.getHeight(), Config.ARGB_8888);
+		boolean ok = OsmAndCore.copyPixels(iconData.getBitmap(), bitmap);
+		return ok ? bitmap : null;
 	}
 }

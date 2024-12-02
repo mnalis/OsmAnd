@@ -1,7 +1,7 @@
 package net.osmand.plus.myplaces.favorites;
 
-import static net.osmand.gpx.GPXUtilities.DEFAULT_ICON_NAME;
 import static net.osmand.data.FavouritePoint.DEFAULT_BACKGROUND_TYPE;
+import static net.osmand.shared.gpx.GpxUtilities.DEFAULT_ICON_NAME;
 
 import android.graphics.drawable.Drawable;
 
@@ -22,7 +22,10 @@ import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.mapmarkers.MapMarkersGroup;
 import net.osmand.plus.mapmarkers.MapMarkersHelper;
+import net.osmand.plus.myplaces.favorites.SaveFavoritesTask.SaveFavoritesListener;
+import net.osmand.shared.gpx.GpxUtilities.PointsGroup;
 import net.osmand.util.Algorithms;
+import net.osmand.util.CollectionUtils;
 
 import org.apache.commons.logging.Log;
 
@@ -47,8 +50,8 @@ public class FavouritesHelper {
 	private final OsmandApplication app;
 	private final FavouritesFileHelper fileHelper;
 
-	private final List<FavoriteGroup> favoriteGroups = new ArrayList<>();
-	private final Map<String, FavoriteGroup> flatGroups = new LinkedHashMap<>();
+	private List<FavoriteGroup> favoriteGroups = new ArrayList<>();
+	private Map<String, FavoriteGroup> flatGroups = new LinkedHashMap<>();
 	private List<FavouritePoint> cachedFavoritePoints = new ArrayList<>();
 
 	private final Set<FavoritesListener> listeners = new HashSet<>();
@@ -113,16 +116,13 @@ public class FavouritesHelper {
 	}
 
 	public void loadFavorites() {
-		flatGroups.clear();
-		favoriteGroups.clear();
-
 		Map<String, FavoriteGroup> groups = fileHelper.loadInternalGroups();
 		Map<String, FavoriteGroup> extGroups = fileHelper.loadExternalGroups();
 
 		boolean changed = merge(extGroups, groups);
 
-		flatGroups.putAll(groups);
-		favoriteGroups.addAll(groups.values());
+		flatGroups = groups;
+		favoriteGroups = new ArrayList<>(groups.values());
 
 		recalculateCachedFavPoints();
 		sortAll();
@@ -131,7 +131,7 @@ public class FavouritesHelper {
 		// Force save favorites to file if internals are different from externals
 		// or no favorites created yet or legacy favourites.gpx present
 		if (changed || !fileHelper.getExternalDir().exists() || legacyExternalFile.exists()) {
-			saveCurrentPointsIntoFile();
+			saveCurrentPointsIntoFile(false);
 			// Delete legacy favourites.gpx if exists
 			if (legacyExternalFile.exists()) {
 				legacyExternalFile.delete();
@@ -157,8 +157,8 @@ public class FavouritesHelper {
 	}
 
 	public void fixBlackBackground() {
-		flatGroups.clear();
-		favoriteGroups.clear();
+		flatGroups = new LinkedHashMap<>();
+		favoriteGroups = new ArrayList<>();
 		for (FavouritePoint fp : getFavouritePoints()) {
 			if (fp.getColor() == 0xFF000000 || fp.getColor() == ContextCompat.getColor(app, R.color.color_favorite)) {
 				fp.setColor(0);
@@ -173,7 +173,7 @@ public class FavouritesHelper {
 			group.getPoints().add(fp);
 		}
 		sortAll();
-		saveCurrentPointsIntoFile();
+		saveCurrentPointsIntoFile(false);
 		notifyListeners();
 	}
 
@@ -258,36 +258,40 @@ public class FavouritesHelper {
 		helper.addOrEnableGroup(favGroup);
 	}
 
-	public void delete(Set<FavoriteGroup> groupsToDelete, Set<FavouritePoint> favoritesSelected) {
-		if (favoritesSelected != null) {
+	public void delete(@Nullable Set<FavoriteGroup> groupsToDelete, @Nullable Set<FavouritePoint> favoritesSelected) {
+		if (!Algorithms.isEmpty(favoritesSelected)) {
 			Set<FavoriteGroup> groupsToSync = new HashSet<>();
-			for (FavouritePoint p : favoritesSelected) {
-				FavoriteGroup group = flatGroups.get(p.getCategory());
+			for (FavouritePoint point : favoritesSelected) {
+				FavoriteGroup group = flatGroups.get(point.getCategory());
 				if (group != null) {
-					group.getPoints().remove(p);
+					group.getPoints().remove(point);
 					groupsToSync.add(group);
 				}
-				if (p.isHomeOrWork()) {
+				if (point.isHomeOrWork()) {
 					app.getLauncherShortcutsHelper().updateLauncherShortcuts();
 				}
-				removeFavouritePoint(p);
+				removeFavouritePoint(point);
 			}
-			for (FavoriteGroup gr : groupsToSync) {
-				runSyncWithMarkers(gr);
+			for (FavoriteGroup group : groupsToSync) {
+				runSyncWithMarkers(group);
 			}
 		}
-		if (groupsToDelete != null) {
+		if (!Algorithms.isEmpty(groupsToDelete)) {
+			Map<String, FavoriteGroup> tmpFlatGroups = new LinkedHashMap<>(flatGroups);
+			ArrayList<FavoriteGroup> tmpFavoriteGroups = new ArrayList<>(favoriteGroups);
 			for (FavoriteGroup g : groupsToDelete) {
-				flatGroups.remove(g.getName());
-				favoriteGroups.remove(g);
+				tmpFlatGroups.remove(g.getName());
+				tmpFavoriteGroups.remove(g);
 				removeFavouritePoints(g.getPoints());
 				removeFromMarkers(g);
 				if (g.isPersonal()) {
 					app.getLauncherShortcutsHelper().updateLauncherShortcuts();
 				}
 			}
+			flatGroups = tmpFlatGroups;
+			favoriteGroups = tmpFavoriteGroups;
 		}
-		saveCurrentPointsIntoFile();
+		saveCurrentPointsIntoFile(true);
 	}
 
 	public boolean deleteFavourite(FavouritePoint point) {
@@ -307,7 +311,7 @@ public class FavouritesHelper {
 			}
 		}
 		if (saveImmediately) {
-			saveCurrentPointsIntoFile();
+			saveCurrentPointsIntoFile(false);
 		}
 		return true;
 	}
@@ -346,15 +350,12 @@ public class FavouritesHelper {
 		}
 	}
 
-	public boolean addFavourite(FavouritePoint p) {
-		return addFavourite(p, true);
+	public boolean addFavourite(@NonNull FavouritePoint point) {
+		return addFavourite(point, true, true, true, null);
 	}
 
-	public boolean addFavourite(FavouritePoint p, boolean saveImmediately) {
-		return addFavourite(p, saveImmediately, true);
-	}
-
-	public boolean addFavourite(FavouritePoint point, boolean saveImmediately, boolean lookupAddress) {
+	public boolean addFavourite(@NonNull FavouritePoint point, boolean lookupAddress, boolean sortAndSave,
+	                            boolean saveAsync, @Nullable PointsGroup pointsGroup) {
 		if (Double.isNaN(point.getAltitude()) || point.getAltitude() == 0) {
 			initAltitude(point);
 		}
@@ -365,23 +366,21 @@ public class FavouritesHelper {
 			lookupAddress(point);
 		}
 		app.getSettings().SHOW_FAVORITES.set(true);
-		FavoriteGroup group = getOrCreateGroup(point);
 
+		FavoriteGroup group = getOrCreateGroup(point, pointsGroup);
 		if (!point.getName().isEmpty()) {
 			point.setVisible(group.isVisible());
 			if (SpecialPointType.PARKING == point.getSpecialPointType()) {
 				point.setColor(ContextCompat.getColor(app, R.color.parking_icon_background));
-			} else {
-				if (point.getColor() == 0) {
-					point.setColor(group.getColor());
-				}
+			} else if (point.getColor() == 0) {
+				point.setColor(group.getColor());
 			}
 			group.getPoints().add(point);
 			addFavouritePoint(point);
 		}
-		if (saveImmediately) {
+		if (sortAndSave) {
 			sortAll();
-			saveCurrentPointsIntoFile();
+			saveCurrentPointsIntoFile(saveAsync);
 		}
 
 		runSyncWithMarkers(group);
@@ -420,10 +419,6 @@ public class FavouritesHelper {
 		}
 	}
 
-	public boolean editFavouriteDescription(FavouritePoint p, String descr) {
-		return editFavouriteName(p, p.getName(), p.getCategory(), descr, p.getAddress());
-	}
-
 	public boolean editFavouriteName(FavouritePoint p, String newName, String category, String descr, String address) {
 		String oldCategory = p.getCategory();
 		p.setName(newName);
@@ -447,14 +442,14 @@ public class FavouritesHelper {
 			pg.getPoints().add(p);
 		}
 		sortAll();
-		saveCurrentPointsIntoFile();
+		saveCurrentPointsIntoFile(true);
 		runSyncWithMarkers(getOrCreateGroup(p));
 		return true;
 	}
 
 	private void editAddressDescription(@NonNull FavouritePoint p, @Nullable String address) {
 		p.setAddress(address);
-		saveCurrentPointsIntoFile();
+		saveCurrentPointsIntoFile(true);
 		runSyncWithMarkers(getOrCreateGroup(p));
 	}
 
@@ -465,7 +460,7 @@ public class FavouritesHelper {
 	public boolean favouritePassed(@NonNull FavouritePoint point, boolean passed, boolean saveImmediately) {
 		point.setVisitedDate(passed ? System.currentTimeMillis() : 0);
 		if (saveImmediately) {
-			saveCurrentPointsIntoFile();
+			saveCurrentPointsIntoFile(false);
 		}
 		FavoriteGroup group = getOrCreateGroup(point);
 		runSyncWithMarkers(group);
@@ -480,26 +475,34 @@ public class FavouritesHelper {
 		if (description != null) {
 			point.setDescription(description);
 		}
-		saveCurrentPointsIntoFile();
+		saveCurrentPointsIntoFile(true);
 		runSyncWithMarkers(getOrCreateGroup(point));
 		return true;
 	}
 
-	public void saveCurrentPointsIntoFile() {
-		fileHelper.saveCurrentPointsIntoFile(new ArrayList<>(favoriteGroups));
+	public void saveCurrentPointsIntoFile(boolean async) {
 		updateLastModifiedTime();
-		onFavouritePropertiesUpdated();
+		SaveFavoritesListener listener = this::onFavouritePropertiesUpdated;
+
+		List<FavoriteGroup> groups = new ArrayList<>(favoriteGroups);
+		if (async) {
+			fileHelper.saveFavoritesIntoFile(groups, listener);
+		} else {
+			fileHelper.saveFavoritesIntoFileSync(groups, listener);
+		}
 	}
 
-	public Exception exportFavorites() {
-		return fileHelper.saveExternalFiles(new ArrayList<>(favoriteGroups), Collections.emptySet());
-	}
-
-	public boolean deleteGroup(@NonNull FavoriteGroup group) {
-		boolean remove = favoriteGroups.remove(group);
+	public boolean deleteGroup(@NonNull FavoriteGroup group, boolean saveImmediately) {
+		List<FavoriteGroup> tmpFavoriteGroups = new ArrayList<>(favoriteGroups);
+		boolean remove = tmpFavoriteGroups.remove(group);
 		if (remove) {
-			flatGroups.remove(group.getName());
-			saveCurrentPointsIntoFile();
+			favoriteGroups = tmpFavoriteGroups;
+			Map<String, FavoriteGroup> tmpFlatGroups = new LinkedHashMap<>(flatGroups);
+			tmpFlatGroups.remove(group.getName());
+			flatGroups = tmpFlatGroups;
+			if (saveImmediately) {
+				saveCurrentPointsIntoFile(false);
+			}
 			removeFromMarkers(group);
 			return true;
 		}
@@ -516,10 +519,10 @@ public class FavouritesHelper {
 		group.setColor(color);
 		group.setIconName(iconName);
 		group.setBackgroundType(backgroundType);
-
-		favoriteGroups.add(group);
-		flatGroups.put(group.getName(), group);
-
+		favoriteGroups = CollectionUtils.addToList(favoriteGroups, group);
+		Map<String, FavoriteGroup> tmpFlatGroups = new LinkedHashMap<>(flatGroups);
+		tmpFlatGroups.put(group.getName(), group);
+		flatGroups = tmpFlatGroups;
 		return group;
 	}
 
@@ -613,15 +616,15 @@ public class FavouritesHelper {
 	}
 
 	private void addFavouritePoint(@NonNull FavouritePoint point) {
-		cachedFavoritePoints = Algorithms.addToList(cachedFavoritePoints, point);
+		cachedFavoritePoints = CollectionUtils.addToList(cachedFavoritePoints, point);
 	}
 
 	private void removeFavouritePoint(@NonNull FavouritePoint point) {
-		cachedFavoritePoints = Algorithms.removeFromList(cachedFavoritePoints, point);
+		cachedFavoritePoints = CollectionUtils.removeFromList(cachedFavoritePoints, point);
 	}
 
 	private void removeFavouritePoints(@NonNull List<FavouritePoint> points) {
-		cachedFavoritePoints = Algorithms.removeAllFromList(cachedFavoritePoints, points);
+		cachedFavoritePoints = CollectionUtils.removeAllFromList(cachedFavoritePoints, points);
 	}
 
 	public void recalculateCachedFavPoints() {
@@ -633,19 +636,31 @@ public class FavouritesHelper {
 	}
 
 	public void sortAll() {
-		Collator collator = Collator.getInstance();
-		collator.setStrength(Collator.SECONDARY);
-		Collections.sort(favoriteGroups, (lhs, rhs) -> lhs.isPersonal() ? -1 : rhs.isPersonal() ? 1 : collator.compare(lhs.getName(), rhs.getName()));
+		Collator collator = getCollator();
+		ArrayList<FavoriteGroup> tmpFavoriteGroups = new ArrayList<>(favoriteGroups);
+		Collections.sort(tmpFavoriteGroups, (lhs, rhs) -> lhs.isPersonal() ? -1 : rhs.isPersonal() ? 1 : collator.compare(lhs.getName(), rhs.getName()));
 		Comparator<FavouritePoint> favoritesComparator = getComparator();
-		for (FavoriteGroup g : favoriteGroups) {
-			Collections.sort(g.getPoints(), favoritesComparator);
+		for (FavoriteGroup group : tmpFavoriteGroups) {
+			ArrayList<FavouritePoint> points = new ArrayList<>(group.getPoints());
+			Collections.sort(points, favoritesComparator);
+			group.setPoints(points);
 		}
-		Collections.sort(cachedFavoritePoints, favoritesComparator);
+		favoriteGroups = tmpFavoriteGroups;
+		ArrayList<FavouritePoint> tmpCechPoints = new ArrayList<>(cachedFavoritePoints);
+		Collections.sort(tmpCechPoints, favoritesComparator);
+		cachedFavoritePoints = tmpCechPoints;
 	}
 
-	public static Comparator<FavouritePoint> getComparator() {
+	@NonNull
+	private static Collator getCollator() {
 		Collator collator = Collator.getInstance();
 		collator.setStrength(Collator.SECONDARY);
+		return collator;
+	}
+
+	@NonNull
+	private static Comparator<FavouritePoint> getComparator() {
+		Collator collator = getCollator();
 		return (o1, o2) -> {
 			String s1 = o1.getName();
 			String s2 = o2.getName();
@@ -662,7 +677,7 @@ public class FavouritesHelper {
 			}
 			int res = collator.compare(ot1, ot2);
 			if (res == 0) {
-				res = i1 - i2;
+				res = Integer.compare(i1, i2);
 			}
 			if (res == 0) {
 				res = collator.compare(s1, s2);
@@ -680,7 +695,7 @@ public class FavouritesHelper {
 		group.setColor(color);
 		runSyncWithMarkers(group);
 		if (saveImmediately) {
-			saveCurrentPointsIntoFile();
+			saveCurrentPointsIntoFile(false);
 		}
 	}
 
@@ -694,7 +709,7 @@ public class FavouritesHelper {
 		group.setIconName(iconName);
 		runSyncWithMarkers(group);
 		if (saveImmediately) {
-			saveCurrentPointsIntoFile();
+			saveCurrentPointsIntoFile(false);
 		}
 	}
 
@@ -708,7 +723,7 @@ public class FavouritesHelper {
 		group.setBackgroundType(backgroundType);
 		runSyncWithMarkers(group);
 		if (saveImmediately) {
-			saveCurrentPointsIntoFile();
+			saveCurrentPointsIntoFile(false);
 		}
 	}
 
@@ -721,7 +736,7 @@ public class FavouritesHelper {
 			runSyncWithMarkers(group);
 		}
 		if (saveImmediately) {
-			saveCurrentPointsIntoFile();
+			saveCurrentPointsIntoFile(false);
 		}
 	}
 
@@ -735,9 +750,11 @@ public class FavouritesHelper {
 			boolean existing = renamedGroup != null;
 			if (renamedGroup == null) {
 				renamedGroup = group;
-				flatGroups.put(group.getName(), group);
+				Map<String, FavoriteGroup> tmpFlatGroups = new LinkedHashMap<>(flatGroups);
+				tmpFlatGroups.put(group.getName(), group);
+				flatGroups = tmpFlatGroups;
 			} else {
-				favoriteGroups.remove(group);
+				favoriteGroups = CollectionUtils.removeFromList(favoriteGroups, group);
 			}
 			for (FavouritePoint point : group.getPoints()) {
 				point.setCategory(newName);
@@ -750,20 +767,36 @@ public class FavouritesHelper {
 			}
 		}
 		if (saveImmediately) {
-			saveCurrentPointsIntoFile();
+			saveCurrentPointsIntoFile(false);
 		}
 	}
 
+	@NonNull
 	private FavoriteGroup getOrCreateGroup(@NonNull FavouritePoint point) {
-		if (flatGroups.containsKey(point.getCategory())) {
-			return flatGroups.get(point.getCategory());
+		return getOrCreateGroup(point, null);
+	}
+
+	@NonNull
+	private FavoriteGroup getOrCreateGroup(@NonNull FavouritePoint point, @Nullable PointsGroup pointsGroup) {
+		FavoriteGroup favoriteGroup = flatGroups.get(point.getCategory());
+		if (favoriteGroup == null) {
+			favoriteGroup = new FavoriteGroup(point);
+			Map<String, FavoriteGroup> tmpFlatGroups = new LinkedHashMap<>(flatGroups);
+			tmpFlatGroups.put(favoriteGroup.getName(), favoriteGroup);
+			flatGroups = tmpFlatGroups;
+			favoriteGroups = CollectionUtils.addToList(favoriteGroups, favoriteGroup);
 		}
-		FavoriteGroup group = new FavoriteGroup(point);
+		updateGroupAppearance(favoriteGroup, pointsGroup);
 
-		flatGroups.put(group.getName(), group);
-		favoriteGroups.add(group);
+		return favoriteGroup;
+	}
 
-		return group;
+	private void updateGroupAppearance(@Nullable FavoriteGroup favoriteGroup, @Nullable PointsGroup pointsGroup) {
+		if (favoriteGroup != null && pointsGroup != null) {
+			favoriteGroup.setColor(pointsGroup.getColor());
+			favoriteGroup.setIconName(pointsGroup.getIconName());
+			favoriteGroup.setBackgroundType(BackgroundType.getByTypeName(pointsGroup.getBackgroundType(), DEFAULT_BACKGROUND_TYPE));
+		}
 	}
 
 	private void onFavouritePropertiesUpdated() {
@@ -772,6 +805,7 @@ public class FavouritesHelper {
 		}
 	}
 
+	@NonNull
 	public static List<FavouritePoint> getPointsFromGroups(@NonNull List<FavoriteGroup> groups) {
 		List<FavouritePoint> favouritePoints = new ArrayList<>();
 		for (FavoriteGroup group : groups) {

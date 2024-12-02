@@ -15,6 +15,12 @@ public class ItemsSelectionHelper<T> {
 	private final Set<T> selectedItems = Collections.synchronizedSet(new HashSet<>());
 	private final Set<T> originalSelectedItems = Collections.synchronizedSet(new HashSet<>());
 
+	public void syncWith(@NonNull ItemsSelectionHelper<T> helper) {
+		setAllItems(helper.getAllItems());
+		setOriginalSelectedItems(helper.getOriginalSelectedItems());
+		setSelectedItems(helper.getSelectedItems());
+	}
+
 	@NonNull
 	public Set<T> getAllItems() {
 		return new HashSet<>(allItems);
@@ -59,6 +65,10 @@ public class ItemsSelectionHelper<T> {
 
 	public void addItemToAll(@NonNull T item) {
 		allItems.add(item);
+	}
+
+	public void addItemToOriginalSelected(@NonNull T item) {
+		originalSelectedItems.add(item);
 	}
 
 	public boolean isItemSelected(@NonNull T item) {

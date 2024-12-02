@@ -1,5 +1,7 @@
 package net.osmand.plus.quickaction.actions;
 
+import static net.osmand.plus.quickaction.QuickActionIds.MAP_STYLE_ACTION_ID;
+
 import android.content.Context;
 import android.content.DialogInterface;
 import android.text.TextUtils;
@@ -35,10 +37,10 @@ public class MapStyleAction extends SwitchableAction<String> {
 
 
 	private static final String KEY_STYLES = "styles";
-	public static final QuickActionType TYPE = new QuickActionType(14,
+	public static final QuickActionType TYPE = new QuickActionType(MAP_STYLE_ACTION_ID,
 			"mapstyle.change", MapStyleAction.class).
 			nameRes(R.string.quick_action_map_style).iconRes(R.drawable.ic_map).
-			category(QuickActionType.CONFIGURE_MAP);
+			category(QuickActionType.CONFIGURE_MAP).nameActionRes(R.string.shared_string_change);
 
 
 	public MapStyleAction() {
@@ -81,7 +83,7 @@ public class MapStyleAction extends SwitchableAction<String> {
 		if (!Algorithms.isEmpty(mapStyles)) {
 			boolean showBottomSheetStyles = Boolean.parseBoolean(getParams().get(KEY_DIALOG));
 			if (showBottomSheetStyles) {
-				showChooseDialog(mapActivity.getSupportFragmentManager());
+				showChooseDialog(mapActivity);
 				return;
 			}
 			String nextStyle = getNextSelectedItem(mapActivity.getMyApplication());
@@ -166,7 +168,7 @@ public class MapStyleAction extends SwitchableAction<String> {
 				AlertDialog.Builder bld = new AlertDialog.Builder(themedContext);
 				bld.setTitle(R.string.renderers);
 
-				Map<String, String> renderers = app.getRendererRegistry().getRenderers();
+				Map<String, String> renderers = app.getRendererRegistry().getRenderers(false);
 				List<String> disabledRendererNames = PluginsHelper.getDisabledRendererNames();
 
 				if (!Algorithms.isEmpty(disabledRendererNames)) {

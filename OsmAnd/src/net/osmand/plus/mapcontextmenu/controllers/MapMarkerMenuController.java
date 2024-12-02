@@ -1,5 +1,8 @@
 package net.osmand.plus.mapcontextmenu.controllers;
 
+import static net.osmand.plus.views.mapwidgets.WidgetType.MARKERS_TOP_BAR;
+import static net.osmand.plus.views.mapwidgets.WidgetsPanel.TOP;
+
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.ShapeDrawable;
@@ -21,11 +24,9 @@ import net.osmand.plus.mapmarkers.MapMarkersHelper;
 import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.utils.ColorUtilities;
 import net.osmand.plus.utils.WidgetUtils;
-import net.osmand.plus.views.mapwidgets.MapWidgetRegistry;
 import net.osmand.plus.views.mapwidgets.WidgetType;
 import net.osmand.plus.views.mapwidgets.WidgetsPanel;
 import net.osmand.plus.views.mapwidgets.WidgetsVisibilityHelper;
-import net.osmand.plus.views.mapwidgets.configure.panel.ConfigureWidgetsFragment;
 import net.osmand.util.Algorithms;
 
 import java.util.Collections;
@@ -66,9 +67,6 @@ public class MapMarkerMenuController extends MenuController {
 				public void buttonPressed() {
 					MapActivity activity = getMapActivity();
 					if (activity != null) {
-						if (!WidgetsVisibilityHelper.isMapMarkerBarWidgetEnabled(mapActivity)) {
-							enableTopMapMarkerWidget(mapActivity);
-						}
 						OsmandApplication app = activity.getMyApplication();
 						MapMarkersHelper markersHelper = app.getMapMarkersHelper();
 						markersHelper.moveMarkerToTop(getMapMarker());
@@ -79,13 +77,6 @@ public class MapMarkerMenuController extends MenuController {
 			rightTitleButtonController.caption = mapActivity.getString(R.string.make_active);
 			rightTitleButtonController.startIcon = createShowOnTopbarIcon(ColorUtilities.getDefaultIconColorId(!isLight()));
 		}
-	}
-
-	private void enableTopMapMarkerWidget(@NonNull MapActivity mapActivity) {
-		OsmandApplication app = mapActivity.getMyApplication();
-		ApplicationMode appMode = app.getSettings().getApplicationMode();
-		List<String> widgetsIds = Collections.singletonList(WidgetType.MARKERS_TOP_BAR.id);
-		WidgetUtils.addSelectedWidgets(mapActivity, widgetsIds, WidgetsPanel.TOP, appMode);
 	}
 
 	@Nullable

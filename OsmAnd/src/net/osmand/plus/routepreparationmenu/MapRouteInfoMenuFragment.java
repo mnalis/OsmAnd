@@ -17,7 +17,7 @@ import androidx.fragment.app.FragmentManager;
 
 import net.osmand.data.QuadRect;
 import net.osmand.data.RotatedTileBox;
-import net.osmand.gpx.GPXFile;
+import net.osmand.shared.gpx.GpxFile;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.base.ContextMenuFragment;
@@ -151,6 +151,10 @@ public class MapRouteInfoMenuFragment extends ContextMenuFragment
 				updateRouteCalculationProgress(0);
 			}
 		}
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			mapActivity.getWidgetsVisibilityHelper().hideWidgets();
+		}
 		menu.onResume();
 	}
 
@@ -159,6 +163,10 @@ public class MapRouteInfoMenuFragment extends ContextMenuFragment
 		super.onPause();
 		if (menu != null) {
 			menu.onPause();
+		}
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			mapActivity.getWidgetsVisibilityHelper().showWidgets();
 		}
 	}
 
@@ -225,6 +233,10 @@ public class MapRouteInfoMenuFragment extends ContextMenuFragment
 			}
 		}
 		return -1;
+	}
+
+	public boolean getContentStatusBarNightMode() {
+		return isNightMode();
 	}
 
 	private void updateToolbar() {
@@ -427,9 +439,9 @@ public class MapRouteInfoMenuFragment extends ContextMenuFragment
 		AndroidUtils.setBackground(ctx, view.findViewById(R.id.app_modes_fold_container), isNightMode(),
 				R.drawable.route_info_trans_gradient_left_light, R.drawable.route_info_trans_gradient_left_dark);
 		AndroidUtils.setBackground(ctx, getBottomScrollView(), isNightMode(),
-				R.color.activity_background_light, R.color.activity_background_dark);
+				R.color.activity_background_color_light, R.color.activity_background_color_dark);
 		AndroidUtils.setBackground(ctx, getCardsContainer(), isNightMode(),
-				R.color.activity_background_light, R.color.activity_background_dark);
+				R.color.activity_background_color_light, R.color.activity_background_color_dark);
 
 		if (getTopView() != null) {
 			View topView = getTopView();
@@ -448,7 +460,7 @@ public class MapRouteInfoMenuFragment extends ContextMenuFragment
 		((TextView) mainView.findViewById(R.id.ViaView)).setTextColor(mainFontColor);
 		((TextView) mainView.findViewById(R.id.toText)).setTextColor(mainFontColor);
 
-		int descriptionColor = ContextCompat.getColor(ctx, R.color.description_font_and_bottom_sheet_icons);
+		int descriptionColor = ContextCompat.getColor(ctx, R.color.text_color_secondary_light);
 		((TextView) mainView.findViewById(R.id.fromTitle)).setTextColor(descriptionColor);
 		((TextView) mainView.findViewById(R.id.ViaSubView)).setTextColor(descriptionColor);
 		((TextView) mainView.findViewById(R.id.toTitle)).setTextColor(descriptionColor);
@@ -472,7 +484,7 @@ public class MapRouteInfoMenuFragment extends ContextMenuFragment
 					slideOutAnim = isLayoutRtl ? R.anim.slide_out_right : R.anim.slide_out_left;
 				}
 			}
-			mapActivity.getContextMenu().hideMenues();
+			mapActivity.getContextMenu().hideMenus();
 
 			Bundle args = new Bundle();
 			args.putInt(MENU_STATE_KEY, initialMenuState);
@@ -489,7 +501,7 @@ public class MapRouteInfoMenuFragment extends ContextMenuFragment
 	}
 
 	@Override
-	public void onSegmentSelect(@NonNull GPXFile gpxFile, int selectedSegment) {
+	public void onSegmentSelect(@NonNull GpxFile gpxFile, int selectedSegment) {
 		MapActivity mapActivity = getMapActivity();
 		if (mapActivity != null) {
 			GpxNavigationHelper.startNavigationForSegment(gpxFile, selectedSegment, mapActivity);
@@ -498,7 +510,7 @@ public class MapRouteInfoMenuFragment extends ContextMenuFragment
 	}
 
 	@Override
-	public void onRouteSelected(@NonNull GPXFile gpxFile, int selectedRoute) {
+	public void onRouteSelected(@NonNull GpxFile gpxFile, int selectedRoute) {
 		MapActivity mapActivity = getMapActivity();
 		if (mapActivity != null) {
 			GpxNavigationHelper.startNavigationForRoute(gpxFile, selectedRoute, mapActivity);

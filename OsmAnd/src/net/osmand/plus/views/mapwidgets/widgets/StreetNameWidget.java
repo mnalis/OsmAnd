@@ -1,5 +1,9 @@
 package net.osmand.plus.views.mapwidgets.widgets;
 
+import static net.osmand.plus.render.OsmandRenderer.RenderingContext;
+import static net.osmand.plus.views.mapwidgets.WidgetType.STREET_NAME;
+import static java.lang.Math.min;
+
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -11,7 +15,14 @@ import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import androidx.annotation.ColorRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.content.ContextCompat;
 
 import net.osmand.Location;
 import net.osmand.binary.BinaryMapRouteReaderAdapter.RouteTypeRule;
@@ -22,14 +33,16 @@ import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.helpers.AndroidUiHelper;
 import net.osmand.plus.helpers.CurrentPositionHelper;
+import net.osmand.plus.helpers.LocationPointWrapper;
 import net.osmand.plus.helpers.WaypointDialogHelper;
 import net.osmand.plus.helpers.WaypointHelper;
-import net.osmand.plus.helpers.WaypointHelper.LocationPointWrapper;
+import net.osmand.plus.render.RendererRegistry;
 import net.osmand.plus.render.TextDrawInfo;
 import net.osmand.plus.render.TextRenderer;
 import net.osmand.plus.routepreparationmenu.MapRouteInfoMenu;
 import net.osmand.plus.routepreparationmenu.ShowAlongTheRouteBottomSheet;
 import net.osmand.plus.routing.CurrentStreetName;
+import net.osmand.plus.routing.RoadShield;
 import net.osmand.plus.routing.RouteCalculationResult.NextDirectionInfo;
 import net.osmand.plus.routing.RoutingHelper;
 import net.osmand.plus.routing.RoutingHelperUtils;
@@ -46,34 +59,27 @@ import net.osmand.util.Algorithms;
 
 import java.util.List;
 
-import androidx.annotation.ColorRes;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.content.res.AppCompatResources;
-import androidx.core.content.ContextCompat;
-
-import static net.osmand.plus.render.OsmandRenderer.RenderingContext;
-import static net.osmand.plus.views.mapwidgets.WidgetType.STREET_NAME;
-
 public class StreetNameWidget extends MapWidget {
 
 	private static final int MAX_MARKER_DISTANCE = 50;
+	public static final int MAX_SHIELDS_QUANTITY = 3;
 
 	private final WaypointHelper waypointHelper;
+	private final RendererRegistry rendererRegistry;
+
 	private LocationPointWrapper lastPoint;
 
 	private final TextView addressText;
 	private final TextView addressTextShadow;
 	private final TextView exitRefText;
-	private final ImageView shieldImage;
+	private final LinearLayout shieldImagesContainer;
 	private final ImageView turnIcon;
 	private final View waypointInfoBar;
 
 	private final TurnDrawable turnDrawable;
 	private int shadowRadius;
 	private boolean showMarker;
-	private String roadShieldName;
-
+	private List<RoadShield> cachedRoadShields;
 
 	@Override
 	protected int getLayoutId() {
@@ -84,12 +90,13 @@ public class StreetNameWidget extends MapWidget {
 		super(mapActivity, STREET_NAME);
 
 		waypointHelper = app.getWaypointHelper();
+		rendererRegistry = app.getRendererRegistry();
 
 		addressText = view.findViewById(R.id.map_address_text);
 		addressTextShadow = view.findViewById(R.id.map_address_text_shadow);
 		waypointInfoBar = view.findViewById(R.id.waypoint_info_bar);
 		exitRefText = view.findViewById(R.id.map_exit_ref);
-		shieldImage = view.findViewById(R.id.map_shield_icon);
+		shieldImagesContainer = view.findViewById(R.id.map_shields_container);
 		turnIcon = view.findViewById(R.id.map_turn_icon);
 
 		turnDrawable = new TurnDrawable(mapActivity, true);
@@ -108,10 +115,9 @@ public class StreetNameWidget extends MapWidget {
 			turnDrawable.setColor(turnArrowColorId);
 		}
 
-		boolean hideStreetName = mapActivity.isTopToolbarActive()
-				|| mapActivity.shouldHideTopControls()
-				|| MapRouteInfoMenu.chooseRoutesVisible
-				|| MapRouteInfoMenu.waypointsVisible;
+		boolean hideStreetName = MapRouteInfoMenu.chooseRoutesVisible
+				|| MapRouteInfoMenu.waypointsVisible
+				|| mapActivity.getWidgetsVisibilityHelper().shouldHideVerticalWidgets();
 		if (hideStreetName) {
 			updateVisibility(false);
 		} else if (showClosestWaypointFirstInAddress && updateWaypoint()) {
@@ -119,7 +125,7 @@ public class StreetNameWidget extends MapWidget {
 			AndroidUiHelper.updateVisibility(addressText, false);
 			AndroidUiHelper.updateVisibility(addressTextShadow, false);
 			AndroidUiHelper.updateVisibility(turnIcon, false);
-			AndroidUiHelper.updateVisibility(shieldImage, false);
+			AndroidUiHelper.updateVisibility(shieldImagesContainer, false);
 			AndroidUiHelper.updateVisibility(exitRefText, false);
 		} else if (streetName == null) {
 			updateVisibility(false);
@@ -129,20 +135,21 @@ public class StreetNameWidget extends MapWidget {
 			AndroidUiHelper.updateVisibility(addressText, true);
 			AndroidUiHelper.updateVisibility(addressTextShadow, shadowRadius > 0);
 
-			RouteDataObject shieldObject = streetName.shieldObject;
-			if (shieldObject != null && shieldObject.nameIds != null && setRoadShield(shieldObject)) {
-				AndroidUiHelper.updateVisibility(shieldImage, true);
-				int indexOf = streetName.text.indexOf("»");
-				if (indexOf > 0) {
-					streetName.text = streetName.text.substring(indexOf);
+			List<RoadShield> shields = streetName.shields;
+			if (!shields.isEmpty() && !shields.equals(cachedRoadShields) && rendererRegistry.getCurrentSelectedRenderer() != null) {
+				if (setRoadShield(shields)) {
+					AndroidUiHelper.updateVisibility(shieldImagesContainer, true);
+					int indexOf = streetName.text.indexOf("»");
+					if (indexOf > 0) {
+						streetName.text = streetName.text.substring(indexOf);
+					}
+				} else {
+					AndroidUiHelper.updateVisibility(shieldImagesContainer, false);
 				}
-				if (roadShieldName != null && streetName.text.startsWith(roadShieldName)) {
-					streetName.text = streetName.text.replaceFirst(roadShieldName, "");
-					streetName.text = streetName.text.trim();
-				}
-			} else {
-				AndroidUiHelper.updateVisibility(shieldImage, false);
-				roadShieldName = null;
+				cachedRoadShields = shields;
+			} else if (shields.isEmpty()) {
+				AndroidUiHelper.updateVisibility(shieldImagesContainer, false);
+				cachedRoadShields = null;
 			}
 
 			if (Algorithms.isEmpty(streetName.exitRef)) {
@@ -212,34 +219,34 @@ public class StreetNameWidget extends MapWidget {
 		}
 	}
 
-	private boolean setRoadShield(@NonNull RouteDataObject object) {
-		StringBuilder additional = new StringBuilder();
-		for (int i = 0; i < object.nameIds.length; i++) {
-			String key = object.region.routeEncodingRules.get(object.nameIds[i]).getTag();
-			String val = object.names.get(object.nameIds[i]);
-			if (!key.endsWith("_ref") && !key.startsWith("route_road")) {
-				additional.append(key).append("=").append(val).append(";");
+	private boolean setRoadShield(@NonNull List<RoadShield> shields) {
+		if (!Algorithms.isEmpty(shields)) {
+			boolean isShieldSet = false;
+			shieldImagesContainer.removeAllViews();
+			int maxShields = min(shields.size(), MAX_SHIELDS_QUANTITY);
+			for (int i = 0; i < maxShields; i++) {
+				RoadShield shield = shields.get(i);
+				isShieldSet |= setShieldImage(shield, mapActivity, shieldImagesContainer, isNightMode());
 			}
-		}
-		for (int i = 0; i < object.nameIds.length; i++) {
-			String key = object.region.routeEncodingRules.get(object.nameIds[i]).getTag();
-			String val = object.names.get(object.nameIds[i]);
-			if (key.startsWith("route_road") && key.endsWith("_ref")) {
-				boolean visible = setRoadShield(object, key, val, additional);
-				if (visible) {
-					return true;
-				}
-			}
+			return isShieldSet;
 		}
 		return false;
 	}
 
-	private boolean setRoadShield(@NonNull RouteDataObject object, @NonNull String nameTag,
-	                              @NonNull String name, @NonNull StringBuilder additional) {
+	public static boolean setShieldImage(@NonNull RoadShield shield, @NonNull MapActivity mapActivity,
+	                                     @NonNull LinearLayout shieldImagesContainer, boolean nightMode) {
+		OsmandApplication app = mapActivity.getMyApplication();
+		RouteDataObject object = shield.getRdo();
+		StringBuilder additional = shield.getAdditional();
+		String shieldValue = shield.getValue();
+		String shieldTag = shield.getTag();
 		int[] types = object.getTypes();
 		RenderingRulesStorage storage = app.getRendererRegistry().getCurrentSelectedRenderer();
+		if (storage == null) {
+			return false;
+		}
 		RenderingRuleSearchRequest rreq = app.getResourceManager().getRenderer()
-				.getSearchRequestWithAppliedCustomRules(storage, isNightMode());
+				.getSearchRequestWithAppliedCustomRules(storage, nightMode);
 
 		for (int type : types) {
 			RouteTypeRule routeTypeRule = object.region.quickGetEncodingRule(type);
@@ -252,14 +259,14 @@ public class StreetNameWidget extends MapWidget {
 			}
 		}
 
-		rreq.setIntFilter(rreq.ALL.R_TEXT_LENGTH, name.length());
-		rreq.setStringFilter(rreq.ALL.R_NAME_TAG, nameTag);
+		rreq.setIntFilter(rreq.ALL.R_TEXT_LENGTH, shieldValue.length());
+		rreq.setStringFilter(rreq.ALL.R_NAME_TAG, shieldTag);
 		rreq.setStringFilter(rreq.ALL.R_ADDITIONAL, additional.toString());
 		rreq.search(RenderingRulesStorage.TEXT_RULES);
 
 		RenderingContext rc = new RenderingContext(app);
 		TextRenderer textRenderer = new TextRenderer(app);
-		TextDrawInfo text = new TextDrawInfo(name);
+		TextDrawInfo text = new TextDrawInfo(shieldValue);
 
 		int shieldRes = -1;
 		if (rreq.isSpecified(rreq.ALL.R_TEXT_SHIELD)) {
@@ -268,26 +275,20 @@ public class StreetNameWidget extends MapWidget {
 					"drawable", app.getPackageName());
 		}
 		if (shieldRes == -1) {
-			roadShieldName = null;
 			return false;
 		}
 
-		Drawable shield = AppCompatResources.getDrawable(mapActivity, shieldRes);
-		if (shield == null) {
-			roadShieldName = null;
+		Drawable shieldDrawable = AppCompatResources.getDrawable(mapActivity, shieldRes);
+		if (shieldDrawable == null) {
 			return false;
 		}
 
-		float xSize = shield.getIntrinsicWidth();
-		float ySize = shield.getIntrinsicHeight();
+		float xSize = shieldDrawable.getIntrinsicWidth();
+		float ySize = shieldDrawable.getIntrinsicHeight();
 		float xyRatio = xSize / ySize;
-		//setting view propotions (height is fixed by toolbar size - 48dp);
+		//setting view proportions (height is fixed by toolbar size - 48dp);
 		int viewHeightPx = AndroidUtils.dpToPx(app, 48);
 		int viewWidthPx = (int) (viewHeightPx * xyRatio);
-
-		ViewGroup.LayoutParams params = shieldImage.getLayoutParams();
-		params.width = viewWidthPx;
-		shieldImage.setLayoutParams(params);
 
 		Bitmap bitmap = Bitmap.createBitmap((int) xSize, (int) ySize, Bitmap.Config.ARGB_8888);
 		Canvas canvas = new Canvas(bitmap);
@@ -299,8 +300,15 @@ public class StreetNameWidget extends MapWidget {
 		textRenderer.drawShieldIcon(rc, canvas, text, text.getShieldResIcon());
 		textRenderer.drawWrappedText(canvas, text, 20f);
 
-		shieldImage.setImageBitmap(bitmap);
-		roadShieldName = name;
+		ImageView imageView = new ImageView(mapActivity);
+		int viewSize = AndroidUtils.dpToPx(app, 40f);
+		LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(viewWidthPx, viewSize);
+		int padding = AndroidUtils.dpToPx(app, 4f);
+		imageView.setPadding(0, 0, 0, padding);
+		imageView.setLayoutParams(params);
+		imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+		imageView.setImageBitmap(bitmap);
+		shieldImagesContainer.addView(imageView);
 		return true;
 	}
 
@@ -339,7 +347,7 @@ public class StreetNameWidget extends MapWidget {
 
 		int exitRefTextColorId = isNightMode()
 				? R.color.text_color_primary_dark
-				: R.color.color_white;
+				: R.color.card_and_list_background_light;
 		exitRefText.setTextColor(ContextCompat.getColor(app, exitRefTextColorId));
 
 		ImageView moreImage = waypointInfoBar.findViewById(R.id.waypoint_more);
@@ -354,7 +362,7 @@ public class StreetNameWidget extends MapWidget {
 		if (updatedVisibility && widgetType.getPanel(settings) == WidgetsPanel.TOP) {
 			MapInfoLayer mapInfoLayer = mapActivity.getMapLayers().getMapInfoLayer();
 			if (mapInfoLayer != null) {
-				mapInfoLayer.recreateTopWidgetsPanel();
+				mapInfoLayer.updateVerticalPanels();
 			}
 			mapActivity.updateStatusBarColor();
 		}
@@ -362,26 +370,21 @@ public class StreetNameWidget extends MapWidget {
 	}
 
 	@Override
-	public void attachView(@NonNull ViewGroup container, @NonNull WidgetsPanel widgetsPanel,
-	                       int order, @NonNull List<MapWidget> followingWidgets) {
+	public void attachView(@NonNull ViewGroup container, @NonNull WidgetsPanel panel, @NonNull List<MapWidget> followingWidgets) {
 		ViewGroup specialContainer = getSpecialContainer();
-		boolean useSpecialPosition = widgetsPanel == WidgetsPanel.TOP && specialContainer != null;
+		boolean useSpecialPosition = panel == WidgetsPanel.TOP && specialContainer != null;
 		if (useSpecialPosition) {
 			specialContainer.removeAllViews();
 
-			boolean currentLocationVisible = mapActivity.getWidgetsVisibilityHelper().shouldShowTopCurrentLocationCoordinatesWidget();
-			boolean mapCenterVisible = mapActivity.getWidgetsVisibilityHelper().shouldShowTopMapCenterCoordinatesWidget();
-			for (MapWidget widget : followingWidgets) {
-				if (widget instanceof CoordinatesBaseWidget && (currentLocationVisible || mapCenterVisible)) {
-					useSpecialPosition = false;
-					break;
-				}
+			boolean showTopCoordinates = mapActivity.getWidgetsVisibilityHelper().shouldShowTopCoordinatesWidget();
+			if (!followingWidgets.isEmpty() && showTopCoordinates) {
+				useSpecialPosition = false;
 			}
 		}
 		if (useSpecialPosition) {
 			specialContainer.addView(view);
 		} else {
-			container.addView(view, order);
+			container.addView(view);
 		}
 	}
 
@@ -400,7 +403,7 @@ public class StreetNameWidget extends MapWidget {
 		return mapActivity.findViewById(R.id.street_name_widget_special_container);
 	}
 
-	private static class StreetNameWidgetParams {
+	static class StreetNameWidgetParams {
 
 		private final OsmandApplication app;
 		private final OsmandSettings settings;

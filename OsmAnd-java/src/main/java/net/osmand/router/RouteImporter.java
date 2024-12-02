@@ -33,6 +33,7 @@ public class RouteImporter {
 
 	private TrkSegment segment;
 	private List<WptPt> segmentRoutePoints;
+	private boolean leftSide = false;
 
 	private final List<RouteSegmentResult> route = new ArrayList<>();
 
@@ -40,8 +41,9 @@ public class RouteImporter {
 		this.file = file;
 	}
 
-	public RouteImporter(GPXFile gpxFile) {
+	public RouteImporter(GPXFile gpxFile, boolean leftSide) {
 		this.gpxFile = gpxFile;
+		this.leftSide = leftSide;
 	}
 
 	public RouteImporter(TrkSegment segment, List<WptPt> segmentRoutePoints) {
@@ -95,8 +97,9 @@ public class RouteImporter {
 
 		collectLocations(resources, segment);
 		collectRoutePointIndexes(resources, segmentRoutePoints);
-		List<RouteSegmentResult> route = collectRouteSegments(region, resources, segment);
 		collectRouteTypes(region, segment);
+
+		List<RouteSegmentResult> route = collectRouteSegments(region, resources, segment);
 		for (RouteSegmentResult routeSegment : route) {
 			routeSegment.fillNames(resources);
 		}
@@ -133,7 +136,7 @@ public class RouteImporter {
 		List<RouteSegmentResult> route = new ArrayList<>();
 		for (RouteSegment routeSegment : segment.routeSegments) {
 			RouteDataObject object = new RouteDataObject(region);
-			RouteSegmentResult segmentResult = new RouteSegmentResult(object);
+			RouteSegmentResult segmentResult = new RouteSegmentResult(object, leftSide);
 			try {
 				segmentResult.readFromBundle(new RouteDataBundle(resources, routeSegment.toStringBundle()));
 				route.add(segmentResult);

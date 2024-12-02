@@ -3,6 +3,7 @@ package net.osmand.plus.plugins.osmedit.helpers;
 
 import androidx.annotation.NonNull;
 
+import com.github.scribejava.core.exceptions.OAuthException;
 import com.github.scribejava.core.model.Response;
 
 import net.osmand.PlatformUtil;
@@ -17,6 +18,7 @@ import net.osmand.plus.plugins.osmedit.data.OsmNotesPoint;
 import net.osmand.plus.plugins.osmedit.data.OsmPoint;
 import net.osmand.plus.plugins.osmedit.data.OsmPoint.Action;
 import net.osmand.plus.plugins.osmedit.oauth.OsmOAuthAuthorizationAdapter;
+import net.osmand.plus.utils.AndroidNetworkUtils;
 import net.osmand.util.Algorithms;
 
 import org.apache.commons.logging.Log;
@@ -81,7 +83,7 @@ public class OsmBugsRemoteUtil implements OsmBugsUtil {
 				b.append(getNotesApi()).append("?");
 				b.append("lat=").append(point.getLatitude());
 				b.append("&lon=").append(point.getLongitude());
-				b.append("&text=").append(URLEncoder.encode(text, "UTF-8"));
+				b.append("&text=").append(URLEncoder.encode(text + "\n\n#OsmAnd", "UTF-8"));
 				msg = "Creating bug";
 			} else {
 				b.append(getNotesApi()).append("/");
@@ -120,7 +122,7 @@ public class OsmBugsRemoteUtil implements OsmBugsUtil {
 		if (authorizationAdapter.isValidToken() && !anonymous) {
 			try {
 				result = performOAuthRequest(url, requestMethod, userOperation, authorizationAdapter);
-			} catch (InterruptedException | ExecutionException | IOException e) {
+			} catch (InterruptedException | ExecutionException | IOException | OAuthException e) {
 				log.error(userOperation + " failed", e);
 				result.warning = e.getMessage();
 			}
@@ -140,7 +142,8 @@ public class OsmBugsRemoteUtil implements OsmBugsUtil {
 		OsmBugResult result = new OsmBugResult();
 		HttpURLConnection connection = NetworkUtils.getHttpURLConnection(url);
 		log.info(userOperation + " " + url);
-		connection.setConnectTimeout(15000);
+		connection.setConnectTimeout(AndroidNetworkUtils.CONNECT_TIMEOUT);
+		connection.setReadTimeout(AndroidNetworkUtils.READ_TIMEOUT);
 		connection.setRequestMethod(requestMethod);
 		connection.setRequestProperty("User-Agent", Version.getFullVersion(app));
 		if (!anonymous) {

@@ -3,7 +3,6 @@ package net.osmand.plus.helpers;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
@@ -106,13 +105,14 @@ public class DiscountHelper {
 		mLastCheckTime = System.currentTimeMillis();
 		Map<String, String> pms = new LinkedHashMap<>();
 		pms.put("version", Version.getFullVersion(app));
-		pms.put("nd", app.getAppInitializer().getFirstInstalledDays() + "");
-		pms.put("ns", app.getAppInitializer().getNumberOfStarts() + "");
+		pms.put("nd", String.valueOf(app.getAppInitializer().getFirstInstalledDays()));
+		pms.put("ns", String.valueOf(app.getAppInitializer().getNumberOfStarts()));
 		pms.put("lang", app.getLanguage() + "");
 		try {
-			pms.put("aid", app.getUserAndroidId());
-		} catch (Exception e) {
-			e.printStackTrace();
+			if (app.isUserAndroidIdAllowed()) {
+				pms.put("aid", app.getUserAndroidId());
+			}
+		} catch (Exception ignore) {
 		}
 		new AsyncTask<Void, Void, String>() {
 
@@ -207,7 +207,7 @@ public class DiscountHelper {
 						settings.DISCOUNT_SHOW_NUMBER_OF_STARTS.set(app.getAppInitializer().getNumberOfStarts());
 						settings.DISCOUNT_SHOW_DATETIME_MS.set(System.currentTimeMillis());
 						if (showChristmasDialog) {
-							mapActivity.showXMasDialog();
+							mapActivity.getFragmentsHelper().showXMasDialog();
 						} else {
 							InAppPurchaseHelper purchaseHelper = mapActivity.getPurchaseHelper();
 							if (purchaseHelper != null) {
@@ -335,7 +335,7 @@ public class DiscountHelper {
 		} else if (url.startsWith(SEARCH_QUERY_PREFIX)) {
 			String query = url.substring(SEARCH_QUERY_PREFIX.length());
 			if (!query.isEmpty()) {
-				mapActivity.showQuickSearch(query);
+				mapActivity.getFragmentsHelper().showQuickSearch(query);
 			}
 		} else if (url.startsWith(SHOW_POI_PREFIX)) {
 			String names = url.substring(SHOW_POI_PREFIX.length());
@@ -516,7 +516,7 @@ public class DiscountHelper {
 		private static int parseColor(String key, JSONObject obj) {
 			String color = obj.optString(key);
 			if (!color.isEmpty()) {
-				return Color.parseColor(color);
+				return Algorithms.parseColor(color);
 			}
 			return -1;
 		}

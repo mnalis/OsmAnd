@@ -1,12 +1,9 @@
 package net.osmand.plus.views.layers.base;
 
+import static net.osmand.plus.configmap.ConfigureMapMenu.CURRENT_TRACK_WIDTH_ATTR;
+
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Matrix;
-import android.graphics.Paint;
+import android.graphics.*;
 import android.graphics.drawable.Drawable;
 
 import androidx.annotation.ColorInt;
@@ -18,8 +15,8 @@ import net.osmand.PlatformUtil;
 import net.osmand.core.jni.FColorARGB;
 import net.osmand.data.RotatedTileBox;
 import net.osmand.plus.R;
+import net.osmand.plus.card.color.palette.gradient.PaletteGradientColor;
 import net.osmand.plus.render.OsmandRenderer;
-import net.osmand.plus.routing.ColoringType;
 import net.osmand.plus.routing.PreviewRouteLineInfo;
 import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.settings.backend.OsmandSettings;
@@ -30,14 +27,13 @@ import net.osmand.plus.views.OsmandMapTileView;
 import net.osmand.render.RenderingRuleProperty;
 import net.osmand.render.RenderingRuleSearchRequest;
 import net.osmand.render.RenderingRulesStorage;
+import net.osmand.shared.routing.ColoringType;
 import net.osmand.util.Algorithms;
 
 import org.apache.commons.logging.Log;
 
 import java.util.HashMap;
 import java.util.Map;
-
-import static net.osmand.plus.configmap.ConfigureMapMenu.CURRENT_TRACK_WIDTH_ATTR;
 
 public abstract class BaseRouteLayer extends OsmandMapLayer {
 
@@ -50,6 +46,7 @@ public abstract class BaseRouteLayer extends OsmandMapLayer {
 
 	protected PreviewRouteLineInfo previewRouteLineInfo;
 	protected ColoringType routeColoringType = ColoringType.DEFAULT;
+	protected String routeGradientPalette = PaletteGradientColor.DEFAULT_NAME;
 	protected String routeInfoAttribute;
 
 	protected RenderingLineAttributes attrs;
@@ -61,6 +58,7 @@ public abstract class BaseRouteLayer extends OsmandMapLayer {
 
 	protected Paint paintIconAction;
 	private Bitmap actionArrow;
+	private Boolean shouldShowDirectionArrows;
 
 	//OpenGL
 	//kOutlineColor 150, 0, 0, 0
@@ -84,6 +82,12 @@ public abstract class BaseRouteLayer extends OsmandMapLayer {
 		initGeometries(density);
 		initPaints();
 		initIcons();
+	}
+
+	@Override
+	protected void updateResources() {
+		super.updateResources();
+		init();
 	}
 
 	protected void initAttrs(float density) {
@@ -111,7 +115,7 @@ public abstract class BaseRouteLayer extends OsmandMapLayer {
 		if (routeColoringType.isCustomColor()) {
 			updateCustomColor(night);
 		} else {
-			directionArrowsColor = null;
+			setDirectionArrowsColor(null);
 			updateAttrs(new DrawSettings(night), view.getCurrentRotatedTileBox());
 			routeLineColor = attrs.paint.getColor();
 		}
@@ -130,7 +134,7 @@ public abstract class BaseRouteLayer extends OsmandMapLayer {
 		}
 
 		if (routeLineColor != customColor) {
-			directionArrowsColor = ColorUtilities.getContrastColor(getContext(), customColor, false);
+			setDirectionArrowsColor(ColorUtilities.getContrastColor(getContext(), customColor, false));
 		}
 		routeLineColor = customColor;
 	}
@@ -139,12 +143,15 @@ public abstract class BaseRouteLayer extends OsmandMapLayer {
 		if (previewRouteLineInfo != null) {
 			routeColoringType = previewRouteLineInfo.getRouteColoringType();
 			routeInfoAttribute = previewRouteLineInfo.getRouteInfoAttribute();
+			routeGradientPalette = previewRouteLineInfo.getGradientPalette();
 		} else {
 			ApplicationMode mode = view.getApplication().getRoutingHelper().getAppMode();
 			OsmandSettings settings = view.getSettings();
 			routeColoringType = settings.ROUTE_COLORING_TYPE.getModeValue(mode);
 			routeInfoAttribute = settings.ROUTE_INFO_ATTRIBUTE.getModeValue(mode);
+			routeGradientPalette = settings.ROUTE_GRADIENT_PALETTE.getModeValue(mode);
 		}
+
 	}
 
 	@Override
@@ -159,6 +166,7 @@ public abstract class BaseRouteLayer extends OsmandMapLayer {
 
 	@ColorInt
 	public int getRouteLineColor(boolean night) {
+		updateRouteColoringType();
 		updateRouteColors(night);
 		return routeLineColor;
 	}
@@ -168,6 +176,25 @@ public abstract class BaseRouteLayer extends OsmandMapLayer {
 		return routeLineColor;
 	}
 
+	@ColorInt
+	@Nullable
+	public Integer getDirectionArrowsColor() {
+		return directionArrowsColor;
+	}
+
+	public void setDirectionArrowsColor(@Nullable Integer directionArrowsColor) {
+		this.directionArrowsColor = directionArrowsColor;
+	}
+
+	public boolean shouldShowDirectionArrows() {
+		return shouldShowDirectionArrows != null ? shouldShowDirectionArrows :
+				previewRouteLineInfo == null || previewRouteLineInfo.shouldShowDirectionArrows();
+	}
+
+	public void setShouldShowDirectionArrows(@Nullable Boolean shouldShowDirectionArrows) {
+		this.shouldShowDirectionArrows = shouldShowDirectionArrows;
+	}
+
 	protected float getRouteLineWidth(@NonNull RotatedTileBox tileBox) {
 		String widthKey;
 		if (previewRouteLineInfo != null) {
@@ -175,11 +202,12 @@ public abstract class BaseRouteLayer extends OsmandMapLayer {
 		} else {
 			widthKey = view.getSettings().ROUTE_LINE_WIDTH.getModeValue(getAppMode());
 		}
-		return widthKey != null ? getWidthByKey(tileBox, widthKey) : attrs.paint.getStrokeWidth();
+		Float width = widthKey != null ? getWidthByKey(tileBox, widthKey) : null;
+		return width != null ? width : attrs.paint.getStrokeWidth();
 	}
 
 	@Nullable
-	protected Float getWidthByKey(RotatedTileBox tileBox, String widthKey) {
+	protected Float getWidthByKey(@NonNull RotatedTileBox tileBox, @NonNull String widthKey) {
 		Float resultValue = cachedRouteLineWidth.get(widthKey);
 		if (resultValue != null) {
 			return resultValue;
@@ -194,6 +222,9 @@ public abstract class BaseRouteLayer extends OsmandMapLayer {
 			}
 		} else {
 			RenderingRulesStorage rrs = view.getApplication().getRendererRegistry().getCurrentSelectedRenderer();
+			if (rrs == null) {
+				return DEFAULT_WIDTH_MULTIPLIER * view.getDensity();
+			}
 			RenderingRuleSearchRequest req = new RenderingRuleSearchRequest(rrs);
 			req.setBooleanFilter(rrs.PROPS.R_NIGHT_MODE, nightMode);
 			req.setIntFilter(rrs.PROPS.R_MINZOOM, tileBox.getZoom());
@@ -218,6 +249,11 @@ public abstract class BaseRouteLayer extends OsmandMapLayer {
 		} else {
 			return view.getSettings().ROUTE_SHOW_TURN_ARROWS.getModeValue(getAppMode());
 		}
+	}
+
+	protected void setTurnArrowPaintsColor(@ColorInt int color) {
+		attrs.paint3.setColor(color);
+		paintIconAction.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.MULTIPLY));
 	}
 
 	protected void drawTurnArrow(Canvas canvas, Matrix matrix, float x, float y, float px, float py) {

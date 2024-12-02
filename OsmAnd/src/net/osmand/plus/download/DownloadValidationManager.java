@@ -2,8 +2,8 @@ package net.osmand.plus.download;
 
 import static net.osmand.plus.Version.FULL_VERSION_NAME;
 
-import android.app.Activity;
 import android.app.Dialog;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -17,6 +17,8 @@ import androidx.fragment.app.FragmentActivity;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.Version;
+import net.osmand.plus.chooseplan.ChoosePlanFragment;
+import net.osmand.plus.chooseplan.OsmAndFeature;
 import net.osmand.plus.download.DownloadIndexesThread.DownloadEvents;
 import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.utils.AndroidUtils;
@@ -85,7 +87,7 @@ public class DownloadValidationManager {
 	}
 
 	private void copyVoiceAssetsWithoutInternet(@NonNull FragmentActivity activity, IndexItem... items) {
-		if (downloadFilesCheck_1_FreeVersion(activity)) {
+		if (downloadFilesCheck_1_FreeVersion(activity, items)) {
 			downloadFilesCheck_3_ValidateSpace(activity, items);
 		}
 	}
@@ -100,21 +102,29 @@ public class DownloadValidationManager {
 	}
 
 	private void downloadFilesWithAllChecks(@NonNull FragmentActivity activity, IndexItem... items) {
-		if (downloadFilesCheck_1_FreeVersion(activity)) {
+		if (downloadFilesCheck_1_FreeVersion(activity, items)) {
 			downloadFilesCheck_2_Internet(activity, items);
 		}
 	}
 
-	private boolean downloadFilesCheck_1_FreeVersion(@NonNull FragmentActivity context) {
-		if (!Version.isPaidVersion(app)) {
-			int total = settings.NUMBER_OF_FREE_DOWNLOADS.get();
-			if (total > MAXIMUM_AVAILABLE_FREE_DOWNLOADS) {
-				new InstallPaidVersionDialogFragment()
-						.show(context.getSupportFragmentManager(), InstallPaidVersionDialogFragment.TAG);
-				return false;
-			}
+	private boolean downloadFilesCheck_1_FreeVersion(@NonNull FragmentActivity context, IndexItem... items) {
+		if (!Version.isPaidVersion(app) && shouldShowChoosePlan(items)) {
+			ChoosePlanFragment.showInstance(context, OsmAndFeature.UNLIMITED_MAP_DOWNLOADS);
+			return false;
 		}
 		return true;
+	}
+
+	private boolean shouldShowChoosePlan(IndexItem... items) {
+		boolean isAnyItemCountedInDownload = false;
+		for (IndexItem indexItem : items) {
+			if (DownloadActivityType.isCountedInDownloads(indexItem)) {
+				isAnyItemCountedInDownload = true;
+				break;
+			}
+		}
+		int total = settings.NUMBER_OF_FREE_DOWNLOADS.get();
+		return total >= MAXIMUM_AVAILABLE_FREE_DOWNLOADS && isAnyItemCountedInDownload;
 	}
 
 	private void downloadFilesCheck_2_Internet(@NonNull FragmentActivity context, IndexItem[] items) {
@@ -211,24 +221,32 @@ public class DownloadValidationManager {
 		@NonNull
 		@Override
 		public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-			String msgTx = getString(R.string.free_version_message, MAXIMUM_AVAILABLE_FREE_DOWNLOADS + "");
-			AlertDialog.Builder msg = new AlertDialog.Builder(requireActivity());
-			msg.setTitle(R.string.free_version_title);
-			msg.setMessage(msgTx);
+			FragmentActivity activity = requireActivity();
+			OsmandApplication app = (OsmandApplication) activity.getApplication();
+
+			AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+			builder.setTitle(R.string.free_version_title);
+			builder.setMessage(getFreeVersionMessage(app));
+
 			if (Version.isMarketEnabled()) {
-				msg.setPositiveButton(R.string.install_paid, (dialog, which) -> {
-					Activity activity = getActivity();
-					if (activity != null) {
-						Uri uri = Uri.parse(Version.getUrlWithUtmRef((OsmandApplication) activity.getApplication(), FULL_VERSION_NAME));
+				builder.setPositiveButton(R.string.install_paid, (dialog, which) -> {
+					Context context = getContext();
+					if (context != null) {
+						Uri uri = Uri.parse(Version.getUrlWithUtmRef(app, FULL_VERSION_NAME));
 						Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-						AndroidUtils.startActivityIfSafe(activity, intent);
+						AndroidUtils.startActivityIfSafe(context, intent);
 					}
 				});
-				msg.setNegativeButton(R.string.shared_string_cancel, null);
+				builder.setNegativeButton(R.string.shared_string_cancel, null);
 			} else {
-				msg.setNeutralButton(R.string.shared_string_ok, null);
+				builder.setNeutralButton(R.string.shared_string_ok, null);
 			}
-			return msg.create();
+			return builder.create();
 		}
+	}
+
+	@NonNull
+	public static String getFreeVersionMessage(@NonNull Context context) {
+		return context.getString(R.string.free_version_message, String.valueOf(MAXIMUM_AVAILABLE_FREE_DOWNLOADS));
 	}
 }

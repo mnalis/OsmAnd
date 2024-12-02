@@ -1,5 +1,6 @@
 package net.osmand.plus.widgets.alert;
 
+import static android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE;
 import static net.osmand.plus.widgets.alert.AlertDialogData.INVALID_ID;
 
 import android.content.Context;
@@ -30,7 +31,7 @@ public class CustomAlert {
 		showSimpleMessage(data, data.getContext().getString(messageId));
 	}
 
-	public static void showSimpleMessage(@NonNull AlertDialogData data, @NonNull String message) {
+	public static void showSimpleMessage(@NonNull AlertDialogData data, @NonNull CharSequence message) {
 		AlertDialog.Builder builder = createAlertDialogBuilder(data);
 		builder.setMessage(message);
 
@@ -67,11 +68,12 @@ public class CustomAlert {
 			editText.setText(initialText);
 		}
 		editText.requestFocus();
-
-		AlertDialog dialog = builder.show();
-		applyAdditionalParameters(dialog, data);
-
 		AndroidUtils.softKeyboardDelayed(activity, editText);
+
+		AlertDialog dialog = builder.create();
+		dialog.getWindow().setSoftInputMode(SOFT_INPUT_STATE_VISIBLE);
+		applyAdditionalParameters(dialog, data);
+		dialog.show();
 	}
 
 	public static void showSingleSelection(@NonNull AlertDialogData data, @NonNull CharSequence[] items,
@@ -122,6 +124,12 @@ public class CustomAlert {
 			builder.setNegativeButton(data.getNegativeButtonTitle(), data.getNegativeButtonListener());
 		} else if (data.getNegativeButtonTitleId() != null) {
 			builder.setNegativeButton(data.getNegativeButtonTitleId(), data.getNegativeButtonListener());
+		}
+
+		if (data.getNeutralButtonTitle() != null) {
+			builder.setNeutralButton(data.getNeutralButtonTitle(), data.getNeutralButtonListener());
+		} else if (data.getNeutralButtonTitleId() != null) {
+			builder.setNeutralButton(data.getNeutralButtonTitleId(), data.getNeutralButtonListener());
 		}
 
 		if (data.getOnDismissListener() != null) {

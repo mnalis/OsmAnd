@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-	xmlns:osmand="http://schemas.android.com/apk/res-auto"
+	xmlns:app="http://schemas.android.com/apk/res-auto"
 	android:id="@+id/free_favorites_backup_card"
 	android:layout_width="match_parent"
 	android:layout_height="wrap_content"
@@ -15,12 +15,13 @@
 		android:layout_height="wrap_content"
 		android:layout_marginTop="@dimen/content_padding_small"
 		android:layout_marginEnd="@dimen/content_padding"
-		android:src="@drawable/ic_action_folder_cloud_colored" />
+		app:srcCompat="@drawable/ic_action_folder_cloud_colored" />
 
 	<LinearLayout
 		android:layout_width="match_parent"
 		android:layout_height="wrap_content"
-		android:orientation="vertical">
+		android:orientation="vertical"
+		android:paddingBottom="@dimen/content_padding">
 
 		<LinearLayout
 			android:layout_width="match_parent"
@@ -42,7 +43,7 @@
 					android:text="@string/free_favorites_backup"
 					android:textColor="?android:textColorPrimary"
 					android:textSize="16sp"
-					osmand:typeface="@string/font_roboto_medium" />
+					app:typefaceWeight="medium" />
 
 				<TextView
 					android:layout_width="wrap_content"
@@ -50,7 +51,7 @@
 					android:layout_marginTop="@dimen/content_padding_small_half"
 					android:text="@string/free_favorites_backup_description"
 					android:textColor="?android:textColorSecondary"
-					android:textSize="16sp" />
+					android:textSize="@dimen/default_desc_text_size" />
 			</LinearLayout>
 
 			<ImageButton
@@ -59,18 +60,24 @@
 				android:layout_height="@dimen/acceptable_touch_radius"
 				android:layout_marginLeft="@dimen/content_padding_small"
 				android:layout_marginRight="@dimen/content_padding_small"
-				android:contentDescription="shared_string_close"
-				osmand:srcCompat="@drawable/ic_action_cancel" />
+				android:background="@null"
+				android:contentDescription="@string/shared_string_close"
+				app:srcCompat="@drawable/ic_action_cancel" />
 
 		</LinearLayout>
 
-		<include
-			android:id="@+id/dismiss_button"
-			layout="@layout/bottom_sheet_dialog_button"
+		<net.osmand.plus.widgets.dialogbutton.DialogButton
+			android:id="@+id/dismiss_button_container"
 			android:layout_width="match_parent"
-			android:layout_height="@dimen/dialog_button_height"
+			android:layout_height="wrap_content"
 			android:layout_margin="@dimen/content_padding"
-			android:layout_weight="0" />
+			android:layout_marginBottom="@dimen/content_padding"
+			android:layout_weight="0"
+			app:dialogButtonHeight="@dimen/dialog_button_height"
+			app:dialogButtonTitle="@string/get_osmand_cloud"
+			app:dialogButtonTopMargin="@dimen/content_padding_small"
+			app:dialogButtonTouchableHeight="@dimen/bottom_sheet_list_item_height"
+			app:dialogButtonType="secondaryActive" />
 
 	</LinearLayout>
 

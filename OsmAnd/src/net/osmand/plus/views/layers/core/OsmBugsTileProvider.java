@@ -1,5 +1,7 @@
 package net.osmand.plus.views.layers.core;
 
+import static net.osmand.data.FavouritePoint.DEFAULT_UI_ICON_ID;
+
 import android.content.Context;
 import android.graphics.Bitmap;
 
@@ -13,7 +15,7 @@ import net.osmand.core.jni.MapTiledCollectionProvider;
 import net.osmand.core.jni.PointI;
 import net.osmand.core.jni.QListMapTiledCollectionPoint;
 import net.osmand.core.jni.QListPointI;
-import net.osmand.core.jni.SWIGTYPE_p_sk_spT_SkImage_const_t;
+import net.osmand.core.jni.SingleSkImage;
 import net.osmand.core.jni.SwigUtilities;
 import net.osmand.core.jni.TextRasterizer;
 import net.osmand.core.jni.TileId;
@@ -29,6 +31,7 @@ import net.osmand.plus.R;
 import net.osmand.plus.plugins.osmedit.OsmBugsLayer;
 import net.osmand.plus.utils.NativeUtilities;
 import net.osmand.plus.views.PointImageDrawable;
+import net.osmand.plus.views.PointImageUtils;
 import net.osmand.plus.views.layers.base.OsmandMapLayer;
 import net.osmand.plus.views.layers.base.OsmandMapLayer.TileBoxRequest;
 import net.osmand.util.Algorithms;
@@ -36,9 +39,9 @@ import net.osmand.util.MapUtils;
 
 import java.util.List;
 
-import static net.osmand.data.FavouritePoint.DEFAULT_UI_ICON_ID;
-
 public class OsmBugsTileProvider extends interface_MapTiledCollectionProvider {
+
+	private static final BackgroundType BACKGROUND_TYPE = BackgroundType.COMMENT;
 
 	private final Context ctx;
 	private final int baseOrder;
@@ -76,7 +79,7 @@ public class OsmBugsTileProvider extends interface_MapTiledCollectionProvider {
 		}
 
 		@Override
-		public SWIGTYPE_p_sk_spT_SkImage_const_t getImageBitmap(boolean isFullSize) {
+		public SingleSkImage getImageBitmap(boolean isFullSize) {
 			Bitmap bitmap = null;
 			if (!osmNote.isOpened() && !showClosed) {
 				return SwigUtilities.nullSkImage();
@@ -91,10 +94,9 @@ public class OsmBugsTileProvider extends interface_MapTiledCollectionProvider {
 					iconId = R.drawable.mx_special_symbol_check_mark;
 					backgroundColorRes = R.color.osm_bug_resolved_icon_color;
 				}
-				BackgroundType backgroundType = BackgroundType.COMMENT;
-				PointImageDrawable pointImageDrawable = PointImageDrawable.getOrCreate(ctx,
+				PointImageDrawable pointImageDrawable = PointImageUtils.getOrCreate(ctx,
 						ContextCompat.getColor(ctx, backgroundColorRes), true, false, iconId,
-						backgroundType);
+						BACKGROUND_TYPE);
 				bitmap = pointImageDrawable.getBigMergedBitmap(textScale, false);
 			} else {
 				int backgroundColorRes;
@@ -103,9 +105,9 @@ public class OsmBugsTileProvider extends interface_MapTiledCollectionProvider {
 				} else {
 					backgroundColorRes = R.color.osm_bug_resolved_icon_color;
 				}
-				PointImageDrawable pointImageDrawable = PointImageDrawable.getOrCreate(ctx,
+				PointImageDrawable pointImageDrawable = PointImageUtils.getOrCreate(ctx,
 						ContextCompat.getColor(ctx, backgroundColorRes), true,
-						false, DEFAULT_UI_ICON_ID, BackgroundType.COMMENT);
+						false, DEFAULT_UI_ICON_ID, BACKGROUND_TYPE);
 				bitmap = pointImageDrawable.getSmallMergedBitmap(textScale);
 			}
 			return bitmap != null ? NativeUtilities.createSkImageFromBitmap(bitmap) : SwigUtilities.nullSkImage();
@@ -127,7 +129,7 @@ public class OsmBugsTileProvider extends interface_MapTiledCollectionProvider {
 		this.textScale = textScale;
 		this.showClosed = showClosed;
 		this.minZoom = minZoom;
-		this.offset = new PointI(0, 0);
+		this.offset = new PointI(0, -BACKGROUND_TYPE.getOffsetY(context, textScale));
 	}
 
 	public void drawSymbols(@NonNull MapRendererView mapRenderer) {
@@ -244,7 +246,7 @@ public class OsmBugsTileProvider extends interface_MapTiledCollectionProvider {
 	}
 
 	@Override
-	public SWIGTYPE_p_sk_spT_SkImage_const_t getImageBitmap(int index, boolean isFullSize) {
+	public SingleSkImage getImageBitmap(int index, boolean isFullSize) {
 		return SwigUtilities.nullSkImage();
 	}
 
@@ -270,7 +272,7 @@ public class OsmBugsTileProvider extends interface_MapTiledCollectionProvider {
 
 	@Override
 	public MapMarker.PinIconVerticalAlignment getPinIconVerticalAlignment() {
-		return MapMarker.PinIconVerticalAlignment.Top;
+		return MapMarker.PinIconVerticalAlignment.CenterVertical;
 	}
 
 	@Override

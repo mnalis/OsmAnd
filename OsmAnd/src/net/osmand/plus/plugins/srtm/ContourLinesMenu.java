@@ -8,6 +8,7 @@ import static net.osmand.plus.plugins.srtm.SRTMPlugin.CONTOUR_WIDTH_ATTR;
 
 import android.view.View;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import net.osmand.PlatformUtil;
@@ -24,7 +25,7 @@ import net.osmand.plus.download.DownloadValidationManager;
 import net.osmand.plus.download.IndexItem;
 import net.osmand.plus.download.SelectIndexesHelper;
 import net.osmand.plus.download.SrtmDownloadItem;
-import net.osmand.plus.inapp.InAppPurchaseHelper;
+import net.osmand.plus.inapp.InAppPurchaseUtils;
 import net.osmand.plus.plugins.PluginsHelper;
 import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.settings.backend.preferences.CommonPreference;
@@ -64,7 +65,7 @@ public class ContourLinesMenu {
 		OsmandApplication app = mapActivity.getMyApplication();
 		OsmandSettings settings = app.getSettings();
 		SRTMPlugin plugin = PluginsHelper.getPlugin(SRTMPlugin.class);
-		boolean srtmEnabled = PluginsHelper.isActive(SRTMPlugin.class) || InAppPurchaseHelper.isContourLinesPurchased(app);
+		boolean srtmEnabled = PluginsHelper.isActive(SRTMPlugin.class) || InAppPurchaseUtils.isContourLinesAvailable(app);
 
 		RenderingRuleProperty contourLinesProp = app.getRendererRegistry().getCustomRenderingRuleProperty(CONTOUR_LINES_ATTR);
 		RenderingRuleProperty colorSchemeProp = app.getRendererRegistry().getCustomRenderingRuleProperty(CONTOUR_LINES_SCHEME_ATTR);
@@ -99,7 +100,7 @@ public class ContourLinesMenu {
 		CommonPreference<String> colorPref = settings.getCustomRenderProperty(colorSchemeProp.getAttrName());
 
 		boolean selected = !pref.get().equals(CONTOUR_LINES_DISABLED_VALUE);
-		int toggleActionStringId = selected ? R.string.shared_string_on : R.string.shared_string_off;
+		int toggleActionStringId = R.string.download_srtm_maps;
 		final int showZoomLevelStringId = R.string.show_from_zoom_level;
 		final int colorSchemeStringId = R.string.srtm_color_scheme;
 
@@ -127,7 +128,7 @@ public class ContourLinesMenu {
 						uiAdapter.onDataSetChanged();
 						mapActivity.refreshMapComplete();
 					});
-				} else if (itemId == R.string.srtm_plugin_name) {
+				} else if (itemId == R.string.download_srtm_maps) {
 					ChoosePlanFragment.showInstance(mapActivity, OsmAndFeature.TERRAIN);
 					closeDashboard(mapActivity);
 				} else if (contourWidthProp != null && itemId == contourWidthName.hashCode()) {
@@ -157,8 +158,10 @@ public class ContourLinesMenu {
 			toggleIconId = R.drawable.ic_action_hide;
 			toggleIconColorId = ContextMenuItem.INVALID_ID;
 		}
+		String summary = mapActivity.getString(selected ? R.string.shared_string_enabled : R.string.shared_string_disabled);
 		contextMenuAdapter.addItem(new ContextMenuItem(null)
 				.setTitleId(toggleActionStringId, mapActivity)
+				.setDescription(summary)
 				.setIcon(toggleIconId)
 				.setColor(app, toggleIconColorId)
 				.setListener(l)
@@ -200,7 +203,7 @@ public class ContourLinesMenu {
 					.setTitleId(R.string.srtm_purchase_header, mapActivity)
 					.setLayout(R.layout.list_group_title_with_switch_light));
 			contextMenuAdapter.addItem(new ContextMenuItem(null)
-					.setTitleId(R.string.srtm_plugin_name, mapActivity)
+					.setTitleId(R.string.download_srtm_maps, mapActivity)
 					.setLayout(R.layout.list_item_icon_and_right_btn)
 					.setIcon(R.drawable.ic_plugin_srtm)
 					.setColor(app, R.color.osmand_orange)
@@ -226,7 +229,7 @@ public class ContourLinesMenu {
 					List<IndexItem> srtms = DownloadResources.findIndexItemsAt(
 							app, mapActivity.getMapLocation(), DownloadActivityType.SRTM_COUNTRY_FILE,
 							false, 1, true);
-					SrtmDownloadItem srtmDownloadItem = convertToSrtmDownloadItem(srtms);
+					SrtmDownloadItem srtmDownloadItem = convertToSrtmDownloadItem(app, srtms);
 					if (srtmDownloadItem != null) {
 						contextMenuAdapter.addItem(createDownloadSrtmMapsItem(mapActivity));
 						contextMenuAdapter.addItem(createSrtmDownloadItem(mapActivity, srtmDownloadItem));
@@ -251,14 +254,15 @@ public class ContourLinesMenu {
 	}
 
 	@Nullable
-	private static SrtmDownloadItem convertToSrtmDownloadItem(List<IndexItem> srtms) {
+	private static SrtmDownloadItem convertToSrtmDownloadItem(@NonNull OsmandApplication app, List<IndexItem> srtms) {
 		if (Algorithms.isEmpty(srtms)) {
 			return null;
 		}
 		List<DownloadItem> individualResources = srtms.get(0).getRelatedGroup().getIndividualDownloadItems();
 		for (DownloadItem downloadItem : individualResources) {
-			if (downloadItem instanceof SrtmDownloadItem) {
-				return (SrtmDownloadItem) downloadItem;
+			if (downloadItem instanceof SrtmDownloadItem srtmDownloadItem) {
+				srtmDownloadItem.updateMetric(app);
+				return srtmDownloadItem;
 			}
 		}
 		return null;

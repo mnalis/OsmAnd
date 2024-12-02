@@ -4,49 +4,62 @@ import static net.osmand.plus.views.mapwidgets.WidgetType.TRIP_RECORDING_DOWNHIL
 import static net.osmand.plus.views.mapwidgets.WidgetType.TRIP_RECORDING_UPHILL;
 
 import android.os.Bundle;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import net.osmand.gpx.GPXTrackAnalysis;
+import net.osmand.shared.gpx.GpxTrackAnalysis;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.myplaces.tracks.GPXTabItemType;
-import net.osmand.plus.settings.enums.MetricsConstants;
+import net.osmand.plus.settings.controllers.BatteryOptimizationController;
+import net.osmand.shared.settings.enums.MetricsConstants;
 import net.osmand.plus.track.fragments.TrackMenuFragment;
 import net.osmand.plus.track.fragments.TrackMenuFragment.TrackMenuTab;
 import net.osmand.plus.plugins.monitoring.SavingTrackHelper;
-import net.osmand.plus.track.helpers.SelectedGpxFile;
 import net.osmand.plus.utils.OsmAndFormatter;
 import net.osmand.plus.utils.OsmAndFormatter.FormattedValue;
 import net.osmand.plus.views.layers.base.OsmandMapLayer.DrawSettings;
 import net.osmand.plus.views.mapwidgets.WidgetType;
-import net.osmand.plus.views.mapwidgets.widgets.TextInfoWidget;
+import net.osmand.plus.views.mapwidgets.WidgetsPanel;
+import net.osmand.plus.views.mapwidgets.widgets.SimpleWidget;
 
-public abstract class TripRecordingElevationWidget extends TextInfoWidget {
+public abstract class TripRecordingElevationWidget extends SimpleWidget {
 
 	private final SavingTrackHelper savingTrackHelper;
 	private int currentTrackIndex;
 
 	private double cachedElevationDiff = -1;
 
-	public TripRecordingElevationWidget(@NonNull MapActivity mapActivity, @Nullable WidgetType widgetType) {
-		super(mapActivity, widgetType);
+	public TripRecordingElevationWidget(@NonNull MapActivity mapActivity, @NonNull WidgetType widgetType, @Nullable String customId, @Nullable WidgetsPanel widgetsPanel) {
+		super(mapActivity, widgetType, customId ,widgetsPanel);
 		savingTrackHelper = app.getSavingTrackHelper();
 
 		updateInfo(null);
-		setOnClickListener(v -> {
-			if (getAnalysis().hasElevationData()) {
-				Bundle params = new Bundle();
-				params.putString(TrackMenuFragment.OPEN_TAB_NAME, TrackMenuTab.TRACK.name());
-				params.putString(TrackMenuFragment.CHART_TAB_NAME, GPXTabItemType.GPX_TAB_ITEM_ALTITUDE.name());
-				TrackMenuFragment.showInstance(mapActivity, savingTrackHelper.getCurrentTrack(), null,
-						null, null, params);
-			}
-		});
+		setOnClickListener(getOnClickListener());
 	}
 
 	@Override
-	public void updateInfo(@Nullable DrawSettings drawSettings) {
+	protected View.OnClickListener getOnClickListener() {
+		return v -> askShowBatteryOptimizationDialog();
+	}
+
+	private void askShowBatteryOptimizationDialog() {
+		BatteryOptimizationController.askShowDialog(mapActivity, true, activity -> askShowTrackMenuDialog());
+	}
+
+	private void askShowTrackMenuDialog() {
+		if (getAnalysis().hasElevationData()) {
+			Bundle params = new Bundle();
+			params.putString(TrackMenuFragment.OPEN_TAB_NAME, TrackMenuTab.TRACK.name());
+			params.putString(TrackMenuFragment.CHART_TAB_NAME, GPXTabItemType.GPX_TAB_ITEM_ALTITUDE.name());
+			TrackMenuFragment.showInstance(mapActivity, savingTrackHelper.getCurrentTrack(), null,
+					null, null, params);
+		}
+	}
+
+	@Override
+	protected void updateSimpleWidgetInfo(@Nullable DrawSettings drawSettings) {
 		int currentTrackIndex = savingTrackHelper.getCurrentTrackIndex();
 		double elevationDiff = getElevationDiff(this.currentTrackIndex != currentTrackIndex);
 		this.currentTrackIndex = currentTrackIndex;
@@ -66,7 +79,7 @@ public abstract class TripRecordingElevationWidget extends TextInfoWidget {
 	protected abstract double getElevationDiff(boolean reset);
 
 	@NonNull
-	protected GPXTrackAnalysis getAnalysis() {
+	protected GpxTrackAnalysis getAnalysis() {
 		return savingTrackHelper.getCurrentTrack().getTrackAnalysis(app);
 	}
 
@@ -74,8 +87,8 @@ public abstract class TripRecordingElevationWidget extends TextInfoWidget {
 
 		private double diffElevationUp;
 
-		public TripRecordingUphillWidget(@NonNull MapActivity mapActivity) {
-			super(mapActivity, TRIP_RECORDING_UPHILL);
+		public TripRecordingUphillWidget(@NonNull MapActivity mapActivity, @Nullable String customId, @Nullable WidgetsPanel widgetsPanel) {
+			super(mapActivity, TRIP_RECORDING_UPHILL, customId, widgetsPanel);
 			setIcons(TRIP_RECORDING_UPHILL);
 		}
 
@@ -84,7 +97,7 @@ public abstract class TripRecordingElevationWidget extends TextInfoWidget {
 			if (reset) {
 				diffElevationUp = 0;
 			}
-			diffElevationUp = Math.max(getAnalysis().diffElevationUp, diffElevationUp);
+			diffElevationUp = Math.max(getAnalysis().getDiffElevationUp(), diffElevationUp);
 			return diffElevationUp;
 		}
 	}
@@ -93,8 +106,8 @@ public abstract class TripRecordingElevationWidget extends TextInfoWidget {
 
 		private double diffElevationDown;
 
-		public TripRecordingDownhillWidget(@NonNull MapActivity mapActivity) {
-			super(mapActivity, TRIP_RECORDING_DOWNHILL);
+		public TripRecordingDownhillWidget(@NonNull MapActivity mapActivity, @Nullable String customId, @Nullable WidgetsPanel widgetsPanel) {
+			super(mapActivity, TRIP_RECORDING_DOWNHILL, customId, widgetsPanel);
 			setIcons(TRIP_RECORDING_DOWNHILL);
 		}
 
@@ -103,7 +116,7 @@ public abstract class TripRecordingElevationWidget extends TextInfoWidget {
 			if (reset) {
 				diffElevationDown = 0;
 			}
-			diffElevationDown = Math.max(getAnalysis().diffElevationDown, diffElevationDown);
+			diffElevationDown = Math.max(getAnalysis().getDiffElevationDown(), diffElevationDown);
 			return diffElevationDown;
 		}
 	}

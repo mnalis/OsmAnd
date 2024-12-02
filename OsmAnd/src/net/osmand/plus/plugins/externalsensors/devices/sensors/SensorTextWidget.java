@@ -12,53 +12,53 @@ import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.settings.backend.preferences.CommonPreference;
 import net.osmand.plus.utils.OsmAndFormatter.FormattedValue;
 import net.osmand.plus.views.layers.base.OsmandMapLayer.DrawSettings;
-import net.osmand.plus.views.mapwidgets.widgets.TextInfoWidget;
+import net.osmand.plus.views.mapwidgets.WidgetsPanel;
+import net.osmand.plus.views.mapwidgets.widgets.SimpleWidget;
 import net.osmand.util.Algorithms;
 
 import java.util.List;
 
-public class SensorTextWidget extends TextInfoWidget {
-	private AbstractSensor sensor;
+public class SensorTextWidget extends SimpleWidget {
+
+	private final ExternalSensorsPlugin plugin;
 	private final SensorWidgetDataFieldType fieldType;
-	private Number cachedNumber;
 	private final CommonPreference<String> deviceIdPref;
+
+	private AbstractSensor sensor;
 	private String externalDeviceId;
-	protected ExternalSensorsPlugin plugin;
+
+	private Number cachedNumber;
+
 
 	public SensorTextWidget(@NonNull MapActivity mapActivity, @NonNull ApplicationMode appMode,
-	                        @NonNull SensorWidgetDataFieldType fieldType, @Nullable String customId) {
-		super(mapActivity, fieldType.getWidgetType());
+	                        @NonNull SensorWidgetDataFieldType fieldType, @Nullable String customId,
+	                        @Nullable WidgetsPanel widgetsPanel) {
+		super(mapActivity, fieldType.getWidgetType(), customId, widgetsPanel);
 		this.fieldType = fieldType;
+		plugin = PluginsHelper.getPlugin(ExternalSensorsPlugin.class);
 		deviceIdPref = registerSensorDevicePref(customId);
 		externalDeviceId = getDeviceId(appMode);
-		plugin = PluginsHelper.getPlugin(ExternalSensorsPlugin.class);
 		applyDeviceId();
 		updateInfo(null);
 		setIcons(fieldType.getWidgetType());
 	}
 
 	private void applyDeviceId() {
-		AbstractDevice<?> device = null;
-		if (externalDeviceId == null) {
+		AbstractDevice<?> currentDevice = null;
+		if (externalDeviceId == null || plugin.isAnyConnectedDeviceId(externalDeviceId)) {
 			List<AbstractDevice<?>> deviceList = plugin.getPairedDevicesByWidgetType(fieldType);
-			if (Algorithms.isEmpty(deviceList)) {
-				externalDeviceId = "";
-			} else {
-				device = deviceList.get(0);
-				externalDeviceId = device.getDeviceId();
+			if (!Algorithms.isEmpty(deviceList)) {
+				currentDevice = deviceList.get(0);
 			}
-			saveDeviceId(externalDeviceId);
-
+		} else {
+			currentDevice = plugin.getPairedDeviceById(externalDeviceId);
 		}
-		if (externalDeviceId != null && plugin != null) {
-			device = plugin.getPairedDeviceById(externalDeviceId);
-		}
-		setSensor(getSensor(device));
+		setSensor(getSensor(currentDevice));
 	}
 
 	public SensorTextWidget(@NonNull MapActivity mapActivity, @NonNull ApplicationMode appMode,
 	                        @NonNull SensorWidgetDataFieldType fieldType) {
-		this(mapActivity, appMode, fieldType, null);
+		this(mapActivity, appMode, fieldType, null, null);
 	}
 
 	@Nullable
@@ -85,18 +85,18 @@ public class SensorTextWidget extends TextInfoWidget {
 	}
 
 	@Nullable
-	public AbstractSensor getWidgetSensor() {
-		return sensor;
+	public AbstractDevice<?> getWidgetDevice() {
+		return sensor == null ? null : sensor.device;
 	}
 
 	@Override
-	public void updateInfo(@Nullable DrawSettings drawSettings) {
+	protected void updateSimpleWidgetInfo(@Nullable DrawSettings drawSettings) {
+		AbstractDevice<?> currentDevice = null;
 		if (sensor != null) {
+			currentDevice = this.sensor.getDevice();
+		}
+		if (sensor != null && currentDevice.isConnected() && !Algorithms.isEmpty(sensor.getLastSensorDataList())) {
 			List<SensorData> dataList = sensor.getLastSensorDataList();
-			if (!sensor.getDevice().isConnected() || Algorithms.isEmpty(dataList)) {
-				setText(NO_VALUE, null);
-				return;
-			}
 			SensorWidgetDataField field = null;
 			for (SensorData data : dataList) {
 				if (data != null) {
@@ -122,6 +122,19 @@ public class SensorTextWidget extends TextInfoWidget {
 		} else {
 			setText(NO_VALUE, null);
 		}
+		if (plugin.isAnyConnectedDeviceId(externalDeviceId) &&
+				(currentDevice == null || (!currentDevice.isConnected() && !currentDevice.isConnecting()))) {
+			AbstractDevice<?> device = plugin.getAnyDevice(getFieldType());
+			if (device != null) {
+				AbstractSensor newSensor = getSensor(device);
+				if (newSensor != null) {
+					if (currentDevice != null) {
+						currentDevice.removeListener(deviceListener);
+					}
+					setSensor(newSensor);
+				}
+			}
+		}
 	}
 
 	@Override
@@ -129,7 +142,7 @@ public class SensorTextWidget extends TextInfoWidget {
 		return true;
 	}
 
-	private AbstractDevice.DeviceListener deviceListener = new AbstractDevice.DeviceListener() {
+	private final AbstractDevice.DeviceListener deviceListener = new AbstractDevice.DeviceListener() {
 		@Override
 		public void onDeviceConnect(@NonNull AbstractDevice<?> device, @NonNull DeviceConnectionResult result, @Nullable String error) {
 			app.runInUIThread(() -> updateInfo(null));
@@ -152,9 +165,9 @@ public class SensorTextWidget extends TextInfoWidget {
 	@NonNull
 	private CommonPreference<String> registerSensorDevicePref(@Nullable String customId) {
 		String prefId = Algorithms.isEmpty(customId) ? fieldType.name() : fieldType.name() + customId;
-		return settings.registerStringPreference(prefId, null)
-				       .makeProfile()
-				       .cache();
+		return settings.registerStringPreference(prefId, plugin.getAnyConnectedDeviceId())
+				.makeProfile()
+				.cache();
 	}
 
 	@Nullable
@@ -175,11 +188,16 @@ public class SensorTextWidget extends TextInfoWidget {
 
 	@Override
 	public void copySettings(@NonNull ApplicationMode appMode, @Nullable String customId) {
-		registerSensorDevicePref(customId).setModeValue(appMode, deviceIdPref.getModeValue(appMode));
+		copySettingsFromMode(appMode, appMode, customId);
+	}
+
+	@Override
+	public void copySettingsFromMode(@NonNull ApplicationMode sourceAppMode, @NonNull ApplicationMode appMode, @Nullable String customId) {
+		super.copySettingsFromMode(sourceAppMode, appMode, customId);
+		registerSensorDevicePref(customId).setModeValue(appMode, deviceIdPref.getModeValue(sourceAppMode));
 	}
 
 	public SensorWidgetDataFieldType getFieldType() {
 		return fieldType;
 	}
-
 }

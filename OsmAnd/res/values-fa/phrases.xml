@@ -98,7 +98,7 @@
     <string name="poi_fire_water_pond">استخر آب آتش نشانی</string>
     <string name="poi_grit_bin">شن بن</string>
     <string name="poi_ambulance_station">ایستگاه آمبولانس</string>
-    <string name="poi_ses_station">ایستگاه SES</string>
+    <string name="poi_disaster_response">ایستگاه SES</string>
     <string name="poi_emergency_access_point">نقطه دسترسی اضطراری</string>
     <string name="poi_ford">گدار</string>
     <string name="poi_mountain_pass">ایستگاه کوهستانی</string>
@@ -726,7 +726,7 @@
     <string name="poi_route_subway_ref">مترو</string>
     <string name="poi_recycling_accepted_waste">محل دفن زباله</string>
     <string name="poi_nudism">برهنگی</string>
-    <string name="poi_health_specialty">بهداشت</string>
+    <string name="poi_healthcare_speciality">بهداشت</string>
     <string name="poi_caravans">کاروان</string>
     <string name="poi_power_supply">پست برق</string>
     <string name="poi_medical_system">نظام پزشکی</string>

@@ -1,28 +1,33 @@
 package net.osmand.router;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-
-import net.osmand.binary.BinaryMapIndexReader;
-import net.osmand.router.RoutingConfiguration.RoutingMemoryLimits;
-
-import net.osmand.util.RouterUtilTest;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import static net.osmand.util.RouterUtilTest.getNativeLibPath;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
 import java.io.Reader;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
-import net.osmand.NativeLibrary;
+import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 
-import static net.osmand.util.RouterUtilTest.getNativeLibPath;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
+import net.osmand.NativeLibrary;
+import net.osmand.binary.BinaryMapIndexReader;
+import net.osmand.router.RoutingConfiguration.RoutingMemoryLimits;
+import net.osmand.util.RouterUtilTest;
 
 @RunWith(Parameterized.class)
 public class RouteTestingTest {
@@ -61,9 +66,15 @@ public class RouteTestingTest {
 
 	}
 
+//	@Ignore 
 	@Test(timeout = TIMEOUT)
 	public void testRouting() throws Exception {
 		NativeLibrary nativeLibrary = null;
+//		BinaryRoutePlanner.TRACE_ROUTING = true;
+//		BinaryRoutePlanner.DEBUG_BREAK_EACH_SEGMENT = true; 
+//		BinaryRoutePlanner.DEBUG_PRECISE_DIST_MEASUREMENT = true;
+//		float DEFAULT_HR = 0;
+		
 		boolean useNative = isNative() && getNativeLibPath() != null && !te.isIgnoreNative();
 		if (useNative) {
 			boolean old = NativeLibrary.loadOldLib(getNativeLibPath());
@@ -73,15 +84,16 @@ public class RouteTestingTest {
 			}
 		}
 
-		String fl = "src/test/resources/Routing_test.obf";
+		String fl = "src/test/resources/routing/Routing_test_archive.obf";
 		RandomAccessFile raf = new RandomAccessFile(fl, "r");
 		RoutePlannerFrontEnd fe = new RoutePlannerFrontEnd();
+		fe.CALCULATE_MISSING_MAPS = false;
 
 		BinaryMapIndexReader[] binaryMapIndexReaders;// = { new BinaryMapIndexReader(raf, new File(fl)) };
 		RoutingConfiguration.Builder builder = RoutingConfiguration.getDefault();
 		Map<String, String> params = te.getParams();
 		if (params.containsKey("map")) {
-			String fl1 = "src/test/resources/" + params.get("map");
+			String fl1 = "src/test/resources/routing/" + params.get("map");
 			RandomAccessFile raf1 = new RandomAccessFile(fl1, "r");
 			binaryMapIndexReaders = new BinaryMapIndexReader[]{
 					new BinaryMapIndexReader(raf1, new File(fl1)),
@@ -109,6 +121,11 @@ public class RouteTestingTest {
 			RoutingConfiguration config = builder.build(params.containsKey("vehicle") ? params.get("vehicle") : "car",
 					memoryLimits, params);
 
+			if (params.containsKey("routeCalculationTime")) {
+				config.routeCalculationTime = Long.parseLong(params.get("routeCalculationTime")); // conditional
+			}
+//			config.heuristicCoefficient = DEFAULT_HR;
+
 			System.out.println("planRoadDirection: " + planRoadDirection);
 
 			if (params.containsKey("heuristicCoefficient")) {
@@ -127,14 +144,15 @@ public class RouteTestingTest {
 
 			ctx.leftSideNavigation = false;
 			List<RouteSegmentResult> routeSegments = fe.searchRoute(ctx, te.getStartPoint(), te.getEndPoint(),
-					te.getTransitPoint());
+					te.getTransitPoint()).detailed;
 			Set<Long> reachedSegments = new TreeSet<Long>();
+			Set<String> reachedSegmentPoints = new TreeSet<>();
 			Assert.assertNotNull(routeSegments);
 			int prevSegment = -1;
 			for (int i = 0; i <= routeSegments.size(); i++) {
 				if (i == routeSegments.size() || routeSegments.get(i).getTurnType() != null) {
 					if (prevSegment >= 0) {
-						String name = routeSegments.get(prevSegment).getDescription();
+						String name = routeSegments.get(prevSegment).getDescription(false);
 						long segmentId = routeSegments.get(prevSegment).getObject()
 								.getId() >> (RouteResultPreparation.SHIFT_ID);
 						System.out.println("segmentId: " + segmentId + " description: " + name);
@@ -142,7 +160,13 @@ public class RouteTestingTest {
 					prevSegment = i;
 				}
 				if (i < routeSegments.size()) {
-					reachedSegments.add(routeSegments.get(i).getObject().getId() >> (RouteResultPreparation.SHIFT_ID));
+					RouteSegmentResult seg = routeSegments.get(i);
+					long id = seg.getObject().getId() >> RouteResultPreparation.SHIFT_ID;
+					for (int point = Math.min(seg.getStartPointIndex(), seg.getEndPointIndex());
+					     point <= Math.max(seg.getStartPointIndex(), seg.getEndPointIndex()); point++) {
+						reachedSegmentPoints.add(id + ":" + point);
+					}
+					reachedSegments.add(id);
 				}
 			}
 			Map<String, String> expectedResults = te.getExpectedResults();
@@ -150,24 +174,36 @@ public class RouteTestingTest {
 				System.out.println("This is test on hanging routing");
 				break;
 			}
-			
-			checkRouteLength(params, routeSegments);
 			checkRoutingTime(ctx, params);
-			
 			for (Entry<String, String> es : expectedResults.entrySet()) {
 				long id = RouterUtilTest.getRoadId(es.getKey());
+				int point = RouterUtilTest.getRoadStartPoint(es.getKey());
+				String pointInSegment = id + ":" + point;
 				switch (es.getValue()) {
 					case "false":
-						Assert.assertFalse("Expected segment " + id + " was wrongly reached in route segments "
-								+ reachedSegments, reachedSegments.contains(id));
+						if (point == -1) {
+							Assert.assertFalse("Expected segment " + id + " was wrongly reached in route segments "
+									+ reachedSegments, reachedSegments.contains(id));
+						} else {
+							Assert.assertTrue("Unexpected pointInSegment " + pointInSegment + " is found in "
+									+ reachedSegmentPoints, !reachedSegmentPoints.contains(pointInSegment));
+						}
 						break;
 					case "true":
-						Assert.assertTrue("Expected segment " + id + " weren't reached in route segments "
-								+ reachedSegments, reachedSegments.contains(id));
+						if (point == -1) {
+							Assert.assertTrue("Expected segment " + id + " weren't reached in route segments "
+									+ reachedSegments, reachedSegments.contains(id));
+						} else {
+							Assert.assertTrue("Expected pointInSegment " + pointInSegment + " is not found in "
+									+ reachedSegmentPoints, reachedSegmentPoints.contains(pointInSegment));
+						}
 						break;
 					case "visitedSegments":
 						Assert.assertTrue("Expected segments visit " + id + " less then actually visited segments "
 								+ ctx.getVisitedSegments(), ctx.getVisitedSegments() < id);
+						break;
+					default:
+						Assert.assertTrue("Invalid key " + es.getKey() + " value " + es.getValue(), false);
 						break;
 				}
 			}
@@ -181,14 +217,5 @@ public class RouteTestingTest {
 		}
 	}
 	
-	private void checkRouteLength(Map<String, String> params, List<RouteSegmentResult> routeSegments) {
-		if (params.containsKey("maxRouteLength")) {
-			float maxRouteLength = Float.parseFloat(params.get("maxRouteLength"));
-			float routeLength = 0;
-			for (RouteSegmentResult segment : routeSegments) {
-				routeLength += segment.getDistance();
-			}
-			Assert.assertTrue("Calculated route length " + routeLength + " is greater then max route length " + maxRouteLength, routeLength < maxRouteLength);
-		}
-	}
+	
 }

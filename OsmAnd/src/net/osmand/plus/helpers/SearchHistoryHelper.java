@@ -10,7 +10,7 @@ import net.osmand.osm.MapPoiTypes;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.api.SQLiteAPI.SQLiteConnection;
 import net.osmand.plus.api.SQLiteAPI.SQLiteCursor;
-import net.osmand.plus.backup.BackupHelper;
+import net.osmand.plus.backup.BackupUtils;
 import net.osmand.plus.poi.PoiUIFilter;
 import net.osmand.plus.search.QuickSearchHelper.SearchHistoryAPI;
 import net.osmand.plus.settings.enums.HistorySource;
@@ -19,6 +19,7 @@ import net.osmand.plus.track.helpers.GpxUiHelper;
 import net.osmand.search.core.SearchPhrase;
 import net.osmand.search.core.SearchResult;
 import net.osmand.util.Algorithms;
+import net.osmand.util.CollectionUtils;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -169,7 +170,7 @@ public class SearchHistoryHelper {
 			if (pd.isCustomPoiFilter()) {
 				app.getPoiFilters().markHistory(pd.getName(), false);
 			}
-			loadedEntries.remove(model);
+			loadedEntries = CollectionUtils.removeFromList(loadedEntries, model);
 			mp.remove(pd);
 		}
 	}
@@ -178,7 +179,7 @@ public class SearchHistoryHelper {
 		HistoryItemDBHelper helper = checkLoadedEntries();
 		if (helper.removeAll()) {
 			app.getPoiFilters().clearHistory();
-			loadedEntries.clear();
+			loadedEntries = new ArrayList<>();
 			mp.clear();
 		}
 	}
@@ -186,8 +187,7 @@ public class SearchHistoryHelper {
 	private HistoryItemDBHelper checkLoadedEntries() {
 		HistoryItemDBHelper helper = new HistoryItemDBHelper();
 		if (loadedEntries == null) {
-			loadedEntries = helper.getEntries();
-			Collections.sort(loadedEntries, new HistoryEntryComparator());
+			loadedEntries = sortHistoryEntries(helper.getEntries());
 			for (HistoryEntry he : loadedEntries) {
 				mp.put(he.getName(), he);
 			}
@@ -203,7 +203,7 @@ public class SearchHistoryHelper {
 				model.markAsAccessed(System.currentTimeMillis());
 				helper.update(model);
 			} else {
-				loadedEntries.add(model);
+				loadedEntries = CollectionUtils.addToList(loadedEntries, model);
 				mp.put(model.getName(), model);
 				model.markAsAccessed(System.currentTimeMillis());
 				helper.add(model);
@@ -221,29 +221,44 @@ public class SearchHistoryHelper {
 
 	public void updateEntriesList() {
 		HistoryItemDBHelper helper = checkLoadedEntries();
-		Collections.sort(loadedEntries, new HistoryEntryComparator());
-		while (loadedEntries.size() > HISTORY_LIMIT) {
-			if (helper.remove(loadedEntries.get(loadedEntries.size() - 1))) {
-				loadedEntries.remove(loadedEntries.size() - 1);
+		List<HistoryEntry> historyEntries = sortHistoryEntries(loadedEntries);
+
+		while (historyEntries.size() > HISTORY_LIMIT) {
+			int lastIndex = historyEntries.size() - 1;
+			if (helper.remove(historyEntries.get(lastIndex))) {
+				historyEntries.remove(lastIndex);
 			}
 		}
+		loadedEntries = historyEntries;
 	}
 
-	private void addItemToHistoryWithReplacement(HistoryEntry model) {
+	private void addItemToHistoryWithReplacement(@NonNull HistoryEntry model) {
 		HistoryItemDBHelper helper = checkLoadedEntries();
+		List<HistoryEntry> historyEntries = new ArrayList<>(loadedEntries);
+
 		PointDescription name = model.getName();
 		if (mp.containsKey(name)) {
 			HistoryEntry oldModel = mp.remove(name);
-			loadedEntries.remove(oldModel);
+			historyEntries.remove(oldModel);
 			helper.remove(model);
 		}
-		loadedEntries.add(model);
+		historyEntries.add(model);
+		loadedEntries = historyEntries;
+
 		mp.put(name, model);
 		helper.add(model);
 	}
 
-	public HistoryEntry getEntryByName(PointDescription pd) {
-		return mp != null && pd != null ? mp.get(pd) : null;
+	@Nullable
+	public HistoryEntry getEntryByName(@Nullable PointDescription pd) {
+		return pd != null ? mp.get(pd) : null;
+	}
+
+	@NonNull
+	private List<HistoryEntry> sortHistoryEntries(@NonNull List<HistoryEntry> historyEntries) {
+		List<HistoryEntry> entries = new ArrayList<>(historyEntries);
+		Collections.sort(entries, new HistoryEntryComparator());
+		return entries;
 	}
 
 	public static class HistoryEntry {
@@ -469,21 +484,21 @@ public class SearchHistoryHelper {
 		}
 
 		public long getLastModifiedTime() {
-			long lastModifiedTime = BackupHelper.getLastModifiedTime(app, HISTORY_LAST_MODIFIED_NAME);
+			long lastModifiedTime = BackupUtils.getLastModifiedTime(app, HISTORY_LAST_MODIFIED_NAME);
 			if (lastModifiedTime == 0) {
 				File dbFile = app.getDatabasePath(DB_NAME);
 				lastModifiedTime = dbFile.exists() ? dbFile.lastModified() : 0;
-				BackupHelper.setLastModifiedTime(app, HISTORY_LAST_MODIFIED_NAME, lastModifiedTime);
+				BackupUtils.setLastModifiedTime(app, HISTORY_LAST_MODIFIED_NAME, lastModifiedTime);
 			}
 			return lastModifiedTime;
 		}
 
 		public void setLastModifiedTime(long lastModifiedTime) {
-			BackupHelper.setLastModifiedTime(app, HISTORY_LAST_MODIFIED_NAME, lastModifiedTime);
+			BackupUtils.setLastModifiedTime(app, HISTORY_LAST_MODIFIED_NAME, lastModifiedTime);
 		}
 
 		private void updateLastModifiedTime() {
-			BackupHelper.setLastModifiedTime(app, HISTORY_LAST_MODIFIED_NAME);
+			BackupUtils.setLastModifiedTime(app, HISTORY_LAST_MODIFIED_NAME);
 		}
 
 		public boolean remove(HistoryEntry e) {

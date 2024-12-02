@@ -1,6 +1,7 @@
 package net.osmand.plus.views.mapwidgets.configure.dialogs;
 
 import static net.osmand.plus.views.mapwidgets.MapWidgetRegistry.ENABLED_MODE;
+import static net.osmand.plus.views.mapwidgets.MapWidgetRegistry.MATCHING_PANELS_MODE;
 import static net.osmand.plus.views.mapwidgets.configure.dialogs.WidgetDataHolder.KEY_EXTERNAL_PROVIDER_PACKAGE;
 import static net.osmand.plus.views.mapwidgets.configure.dialogs.WidgetDataHolder.KEY_EXTERNAL_WIDGET_ID;
 import static net.osmand.plus.views.mapwidgets.configure.dialogs.WidgetDataHolder.KEY_GROUP_NAME;
@@ -23,10 +24,14 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
 
+import net.osmand.Collator;
+import net.osmand.OsmAndCollator;
 import net.osmand.aidl.AidlMapWidgetWrapper;
 import net.osmand.aidl.OsmandAidlApi;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
+import net.osmand.plus.chooseplan.ChoosePlanFragment;
+import net.osmand.plus.chooseplan.OsmAndFeature;
 import net.osmand.plus.helpers.AndroidUiHelper;
 import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.utils.AndroidUtils;
@@ -39,7 +44,6 @@ import net.osmand.plus.views.mapwidgets.WidgetGroup;
 import net.osmand.plus.views.mapwidgets.WidgetType;
 import net.osmand.plus.views.mapwidgets.WidgetsPanel;
 import net.osmand.plus.views.mapwidgets.banner.WidgetPromoBanner;
-import net.osmand.plus.views.mapwidgets.banner.WidgetPromoBanner.WidgetData;
 import net.osmand.plus.views.mapwidgets.configure.WidgetIconsHelper;
 import net.osmand.plus.views.mapwidgets.configure.panel.WidgetsListFragment;
 import net.osmand.plus.views.mapwidgets.configure.reorder.ReorderWidgetsFragment;
@@ -161,6 +165,8 @@ public class AddWidgetFragment extends BaseWidgetFragment {
 		List<WidgetType> widgets = widgetsDataHolder.getWidgetsList();
 		AidlMapWidgetWrapper aidlWidgetData = widgetsDataHolder.getAidlWidgetData();
 		if (widgets != null) {
+			Collator collator = OsmAndCollator.primaryCollator();
+			widgets.sort((indexItem, indexItem2) -> collator.compare(app.getString(indexItem.titleId), app.getString(indexItem2.titleId)));
 			inflateWidgetsList(widgets);
 		} else if (aidlWidgetData != null) {
 			inflateAidlWidget(aidlWidgetData);
@@ -191,10 +197,15 @@ public class AddWidgetFragment extends BaseWidgetFragment {
 				Drawable icon = getIcon(widget.getIconId(nightMode));
 				setupWidgetItemView(view, widget.id, title, desc, icon, widget.getDefaultOrder());
 				container.addView(view);
+			} else if (widget.isOBDWidget()) {
+				View view = inflater.inflate(R.layout.selectable_widget_item_pro_banner, container, false);
+				((ImageView) view.findViewById(R.id.icon)).setImageResource(widget.getIconId(nightMode));
+				((TextView) view.findViewById(R.id.title)).setText(widget.titleId);
+				view.setOnClickListener(v -> ChoosePlanFragment.showInstance(activity, OsmAndFeature.VEHICLE_METRICS));
+				container.addView(view);
 			} else {
-				WidgetData widgetData = new WidgetData(widget.titleId, widget.dayIconId, widget.nightIconId);
-				WidgetPromoBanner banner = new WidgetPromoBanner(activity, widgetData, false);
-				container.addView(banner.build(activity));
+				container.addView(new WidgetPromoBanner(activity, widget, false).build());
+				addVerticalSpace(container, getDimensionPixelSize(R.dimen.content_padding_small));
 			}
 		}
 	}
@@ -215,11 +226,11 @@ public class AddWidgetFragment extends BaseWidgetFragment {
 	}
 
 	private void setupWidgetItemView(@NonNull View view,
-	                                 @NonNull String widgetId,
-	                                 @NonNull String title,
-	                                 @Nullable String description,
-	                                 @Nullable Drawable icon,
-	                                 int order) {
+									 @NonNull String widgetId,
+									 @NonNull String title,
+									 @Nullable String description,
+									 @Nullable Drawable icon,
+									 int order) {
 		((ImageView) view.findViewById(R.id.icon)).setImageDrawable(icon);
 		((TextView) view.findViewById(R.id.title)).setText(title);
 
@@ -250,7 +261,7 @@ public class AddWidgetFragment extends BaseWidgetFragment {
 	private boolean isWidgetEnabled(@NonNull MapActivity mapActivity, @NonNull String widgetId) {
 		MapWidgetRegistry widgetRegistry = app.getOsmandMap().getMapLayers().getMapWidgetRegistry();
 		Set<MapWidgetInfo> enabledWidgets = widgetRegistry.getWidgetsForPanel(mapActivity, appMode,
-				ENABLED_MODE, Arrays.asList(WidgetsPanel.values()));
+				ENABLED_MODE | MATCHING_PANELS_MODE, Arrays.asList(WidgetsPanel.values()));
 
 		for (MapWidgetInfo widgetInfo : enabledWidgets) {
 			if (widgetId.equals(widgetInfo.key)) {
@@ -290,7 +301,7 @@ public class AddWidgetFragment extends BaseWidgetFragment {
 			if (target instanceof AddWidgetListener) {
 				List<String> widgetsIds = new ArrayList<>(selectedWidgetsIds.values());
 				WidgetsPanel widgetsPanel = widgetsDataHolder.getWidgetsPanel();
-				((AddWidgetListener) target).onWidgetsSelectedToAdd(widgetsIds, widgetsPanel);
+				((AddWidgetListener) target).onWidgetsSelectedToAdd(widgetsIds, widgetsPanel, true);
 			}
 			dismiss();
 		});
@@ -327,12 +338,12 @@ public class AddWidgetFragment extends BaseWidgetFragment {
 	 *                                  of added widgets ids of this group; null if in view mode
 	 *                                  ({@link WidgetsListFragment})
 	 */
-	public static void showGroupDialog(@NonNull FragmentManager fragmentManager,
-	                                   @NonNull Fragment target,
-	                                   @NonNull ApplicationMode appMode,
-	                                   @NonNull WidgetsPanel widgetsPanel,
-	                                   @NonNull WidgetGroup widgetGroup,
-	                                   @Nullable List<String> alreadySelectedWidgetsIds) {
+	public static void showGroupDialog(@NonNull FragmentManager manager,
+									   @Nullable Fragment target,
+									   @NonNull ApplicationMode appMode,
+									   @NonNull WidgetsPanel widgetsPanel,
+									   @NonNull WidgetGroup widgetGroup,
+									   @Nullable List<String> alreadySelectedWidgetsIds) {
 		Bundle args = new Bundle();
 		args.putString(KEY_APP_MODE, appMode.getStringKey());
 		args.putString(KEY_WIDGETS_PANEL_ID, widgetsPanel.name());
@@ -341,18 +352,18 @@ public class AddWidgetFragment extends BaseWidgetFragment {
 		AddWidgetFragment fragment = new AddWidgetFragment();
 		fragment.setArguments(args);
 		fragment.setTargetFragment(target, 0);
-		showFragment(fragmentManager, fragment);
+		showFragment(manager, fragment);
 	}
 
 	/**
 	 * @see AddWidgetListener#showGroupDialog
 	 */
-	public static void showWidgetDialog(@NonNull FragmentManager fragmentManager,
-	                                    @NonNull Fragment target,
-	                                    @NonNull ApplicationMode appMode,
-	                                    @NonNull WidgetsPanel widgetsPanel,
-	                                    @NonNull WidgetType widgetType,
-	                                    @Nullable List<String> alreadySelectedWidgetsIds) {
+	public static void showWidgetDialog(@NonNull FragmentManager manager,
+										@Nullable Fragment target,
+										@NonNull ApplicationMode appMode,
+										@NonNull WidgetsPanel widgetsPanel,
+										@NonNull WidgetType widgetType,
+										@Nullable List<String> alreadySelectedWidgetsIds) {
 		Bundle args = new Bundle();
 		args.putString(KEY_APP_MODE, appMode.getStringKey());
 		args.putString(KEY_WIDGETS_PANEL_ID, widgetsPanel.name());
@@ -361,19 +372,19 @@ public class AddWidgetFragment extends BaseWidgetFragment {
 		AddWidgetFragment fragment = new AddWidgetFragment();
 		fragment.setArguments(args);
 		fragment.setTargetFragment(target, 0);
-		showFragment(fragmentManager, fragment);
+		showFragment(manager, fragment);
 	}
 
 	/**
 	 * @see AddWidgetListener#showGroupDialog
 	 */
-	public static void showExternalWidgetDialog(@NonNull FragmentManager fragmentManager,
-	                                            @NonNull Fragment target,
-	                                            @NonNull ApplicationMode appMode,
-	                                            @NonNull WidgetsPanel widgetsPanel,
-	                                            @NonNull String widgetId,
-	                                            @NonNull String externalProviderPackage,
-	                                            @Nullable List<String> alreadySelectedWidgetsIds) {
+	public static void showExternalWidgetDialog(@NonNull FragmentManager manager,
+												@Nullable Fragment target,
+												@NonNull ApplicationMode appMode,
+												@NonNull WidgetsPanel widgetsPanel,
+												@NonNull String widgetId,
+												@NonNull String externalProviderPackage,
+												@Nullable List<String> alreadySelectedWidgetsIds) {
 		Bundle args = new Bundle();
 		args.putString(KEY_APP_MODE, appMode.getStringKey());
 		args.putString(KEY_WIDGETS_PANEL_ID, widgetsPanel.name());
@@ -383,12 +394,12 @@ public class AddWidgetFragment extends BaseWidgetFragment {
 		AddWidgetFragment fragment = new AddWidgetFragment();
 		fragment.setArguments(args);
 		fragment.setTargetFragment(target, 0);
-		showFragment(fragmentManager, fragment);
+		showFragment(manager, fragment);
 	}
 
-	private static void showFragment(@NonNull FragmentManager fragmentManager, @NonNull AddWidgetFragment fragment) {
-		if (AndroidUtils.isFragmentCanBeAdded(fragmentManager, TAG)) {
-			fragmentManager.beginTransaction()
+	private static void showFragment(@NonNull FragmentManager manager, @NonNull AddWidgetFragment fragment) {
+		if (AndroidUtils.isFragmentCanBeAdded(manager, TAG)) {
+			manager.beginTransaction()
 					.add(R.id.fragmentContainer, fragment, TAG)
 					.addToBackStack(TAG)
 					.commitAllowingStateLoss();
@@ -396,6 +407,6 @@ public class AddWidgetFragment extends BaseWidgetFragment {
 	}
 
 	public interface AddWidgetListener {
-		void onWidgetsSelectedToAdd(@NonNull List<String> widgetsIds, @NonNull WidgetsPanel widgetsPanel);
+		void onWidgetsSelectedToAdd(@NonNull List<String> widgetsIds, @NonNull WidgetsPanel widgetsPanel, boolean recreateControls);
 	}
 }

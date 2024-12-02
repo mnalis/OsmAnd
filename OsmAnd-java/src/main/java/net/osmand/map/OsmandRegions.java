@@ -42,6 +42,8 @@ public class OsmandRegions {
 
 	public static final String MAP_TYPE = "region_map";
 	public static final String ROADS_TYPE = "region_roads";
+	public static final String MAP_JOIN_TYPE = "region_join_map";
+	public static final String ROADS_JOIN_TYPE = "region_join_roads";
 
 	public static final String FIELD_DOWNLOAD_NAME = "download_name";
 	public static final String FIELD_NAME = "name";
@@ -201,15 +203,20 @@ public class OsmandRegions {
 	}
 
 	public String getLocaleName(String downloadName, boolean includingParent, boolean reversed) {
+		String divider = reversed ? ", " : " ";
+		return getLocaleName(downloadName, divider, includingParent, reversed);
+	}
+
+	public String getLocaleName(String downloadName, String divider, boolean includingParent, boolean reversed) {
 		final String lc = downloadName.toLowerCase();
 		if (downloadNamesToFullNames.containsKey(lc)) {
 			String fullName = downloadNamesToFullNames.get(lc);
-			return getLocaleNameByFullName(fullName, includingParent, reversed);
+			return getLocaleNameByFullName(fullName, divider, includingParent, reversed);
 		}
 		return downloadName.replace('_', ' ');
 	}
 
-	public String getLocaleNameByFullName(String fullName, boolean includingParent, boolean reversed) {
+	public String getLocaleNameByFullName(String fullName, String divider, boolean includingParent, boolean reversed) {
 		WorldRegion region = fullNamesToRegionData.get(fullName);
 		if (region == null) {
 			return fullName.replace('_', ' ');
@@ -232,13 +239,13 @@ public class OsmandRegions {
 			}
 			List<WorldRegion> superRegions = region.getSuperRegions();
 			if (!Algorithms.isEmpty(superRegions)) {
-				return getLocaleNameWithParent(superRegions, regionName, reversed);
+				return getLocaleNameWithParent(superRegions, regionName, divider, reversed);
 			}
 		}
 		return regionName;
 	}
 
-	private String getLocaleNameWithParent(List<WorldRegion> superRegions, String regionName, boolean reversed) {
+	private String getLocaleNameWithParent(List<WorldRegion> superRegions, String regionName, String divider, boolean reversed) {
 		StringBuilder builder = new StringBuilder();
 		List<String> topRegionsIds = getTopRegionsIds();
 		if (reversed) {
@@ -247,7 +254,7 @@ public class OsmandRegions {
 				String regionId = region.getRegionId();
 				if ((!topRegionsIds.contains(regionId) || WorldRegion.RUSSIA_REGION_ID.equals(regionId))
 						&& (!WorldRegion.WORLD.equals(regionId))) {
-					builder.append(", ").append(region.getLocaleName());
+					builder.append(divider).append(region.getLocaleName());
 				}
 			}
 		} else {
@@ -257,7 +264,7 @@ public class OsmandRegions {
 				String regionId = region.getRegionId();
 				if ((!topRegionsIds.contains(regionId) || WorldRegion.RUSSIA_REGION_ID.equals(regionId))
 						&& (!WorldRegion.WORLD.equals(regionId))) {
-					builder.append(region.getLocaleName()).append(" ");
+					builder.append(region.getLocaleName()).append(divider);
 				}
 			}
 			builder.append(regionName);
@@ -273,7 +280,7 @@ public class OsmandRegions {
 		return reader != null;
 	}
 
-	public boolean contain(BinaryMapDataObject bo, int tx, int ty) {
+	public static boolean contain(BinaryMapDataObject bo, int tx, int ty) {
 		int t = 0;
 		for (int i = 1; i < bo.getPointsLength(); i++) {
 			int fx = MapAlgorithms.ray_intersect_x(bo.getPoint31XTile(i - 1),
@@ -287,7 +294,7 @@ public class OsmandRegions {
 		return t % 2 == 1;
 	}
 
-	public boolean intersect(BinaryMapDataObject bo, int lx, int ty, int rx, int by) {
+	public static boolean intersect(BinaryMapDataObject bo, int lx, int ty, int rx, int by) {
 		// 1. polygon in object 
 		if (contain(bo, lx, ty)) {
 			return true;
@@ -628,7 +635,7 @@ public class OsmandRegions {
 					return false;
 				}
 				initTypes(object);
-				String nm = mapIndexFields.get(useDownloadName? mapIndexFields.downloadNameType :mapIndexFields.fullNameType, object);
+				String nm = mapIndexFields.get(useDownloadName ? mapIndexFields.downloadNameType : mapIndexFields.fullNameType, object);
 				if (!countriesByDownloadName.containsKey(nm)) {
 					LinkedList<BinaryMapDataObject> ls = new LinkedList<BinaryMapDataObject>();
 					countriesByDownloadName.put(nm, ls);
@@ -822,6 +829,8 @@ public class OsmandRegions {
 					it.remove();
 				} else if (region.getRegionId().contains("basemap")) {
 					it.remove();
+				} else if (region.getRegionId().startsWith("World_")) {
+					it.remove();
 				}
 			} else {
 				it.remove();
@@ -917,6 +926,19 @@ public class OsmandRegions {
 		return foundObjects;
 	}
 
+	public List<BinaryMapDataObject> getRegionsToDownload(double lat, double lon) throws IOException {
+		List<BinaryMapDataObject> l = new ArrayList<BinaryMapDataObject>();
+		int x31 = MapUtils.get31TileNumberX(lon);
+		int y31 = MapUtils.get31TileNumberY(lat);
+		List<BinaryMapDataObject> cs = query(x31, y31);
+		for (BinaryMapDataObject b : cs) {
+			if (contain(b, x31, y31) && !Algorithms.isEmpty(getDownloadName(b))) {
+				l.add(b);
+			}
+		}
+		return l;
+	}
+	
 	public List<String> getRegionsToDownload(double lat, double lon, List<String> keyNames) throws IOException {
 		keyNames.clear();
 		int x31 = MapUtils.get31TileNumberX(lon);

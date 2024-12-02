@@ -11,6 +11,12 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+
+import com.google.android.material.slider.Slider;
+
 import net.osmand.plus.R;
 import net.osmand.plus.helpers.AndroidUiHelper;
 import net.osmand.plus.settings.backend.ApplicationMode;
@@ -18,9 +24,9 @@ import net.osmand.plus.settings.backend.preferences.OsmandPreference;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.ColorUtilities;
 import net.osmand.plus.utils.UiUtilities;
-import net.osmand.plus.views.mapwidgets.AverageSpeedComputer;
 import net.osmand.plus.views.mapwidgets.MapWidgetInfo;
 import net.osmand.plus.views.mapwidgets.WidgetType;
+import net.osmand.plus.views.mapwidgets.utils.AverageSpeedComputer;
 import net.osmand.plus.views.mapwidgets.widgets.MapMarkerSideWidget;
 import net.osmand.plus.views.mapwidgets.widgetstates.MapMarkerSideWidgetState;
 import net.osmand.plus.views.mapwidgets.widgetstates.MapMarkerSideWidgetState.MarkerClickBehaviour;
@@ -28,19 +34,13 @@ import net.osmand.plus.views.mapwidgets.widgetstates.MapMarkerSideWidgetState.Si
 import net.osmand.plus.widgets.alert.AlertDialogData;
 import net.osmand.plus.widgets.alert.CustomAlert;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
-
-import com.google.android.material.slider.Slider;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
-public class MapMarkerSideWidgetSettingsFragment extends WidgetSettingsBaseFragment {
+public class MapMarkerSideWidgetSettingsFragment extends BaseSimpleWidgetSettingsFragment {
 
 	private static final String MARKER_MODE_KEY = "marker_mode";
 	private static final String MARKER_CLICK_BEHAVIOUR_KEY = "marker_click_behaviour";
@@ -101,6 +101,8 @@ public class MapMarkerSideWidgetSettingsFragment extends WidgetSettingsBaseFragm
 
 		updateToolbarIcon();
 		setupConfigButtons();
+		themedInflater.inflate(R.layout.divider, container);
+		super.setupContent(themedInflater, container);
 	}
 
 	private void setupConfigButtons() {
@@ -191,16 +193,15 @@ public class MapMarkerSideWidgetSettingsFragment extends WidgetSettingsBaseFragm
 		TextView tvTitle = view.findViewById(R.id.title);
 		tvTitle.setText(title);
 
-		TextView tvDesc = view.findViewById(R.id.description);
-		tvDesc.setText(desc);
-		AndroidUiHelper.updateVisibility(tvDesc, true);
+		TextView description = view.findViewById(R.id.description);
+		description.setText(desc);
+		AndroidUiHelper.updateVisibility(description, true);
 
-		if (showShortDivider) {
-			view.findViewById(R.id.short_divider).setVisibility(View.VISIBLE);
-		}
+		view.findViewById(R.id.button_container).setOnClickListener(listener);
 
-		setupClickListener(view, listener);
 		setupListItemBackground(view);
+		AndroidUiHelper.updateVisibility(view.findViewById(R.id.short_divider), showShortDivider);
+
 		return view;
 	}
 
@@ -295,11 +296,6 @@ public class MapMarkerSideWidgetSettingsFragment extends WidgetSettingsBaseFragm
 		AndroidUtils.setBackground(button, background);
 	}
 
-	private void setupClickListener(@NonNull View view, @Nullable OnClickListener listener) {
-		View button = view.findViewById(R.id.button_container);
-		button.setOnClickListener(listener);
-	}
-
 	private void updateToolbarIcon() {
 		ImageView icon = view.findViewById(R.id.icon);
 		int iconId = selectedMarkerMode.getIconId(nightMode);
@@ -316,6 +312,7 @@ public class MapMarkerSideWidgetSettingsFragment extends WidgetSettingsBaseFragm
 
 	@Override
 	protected void applySettings() {
+		super.applySettings();
 		markerModePref.setModeValue(appMode, selectedMarkerMode);
 		if (selectedMarkerMode == SideMarkerMode.ESTIMATED_ARRIVAL_TIME) {
 			averageSpeedIntervalPref.setModeValue(appMode, selectedIntervalMillis);

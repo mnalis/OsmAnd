@@ -19,8 +19,6 @@ import androidx.fragment.app.FragmentManager;
 
 import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
-import net.osmand.data.QuadRect;
-import net.osmand.gpx.GPXFile;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
@@ -29,6 +27,7 @@ import net.osmand.plus.dialogs.DirectionsDialogs;
 import net.osmand.plus.helpers.AndroidUiHelper;
 import net.osmand.plus.helpers.SearchHistoryHelper;
 import net.osmand.plus.helpers.SearchHistoryHelper.HistoryEntry;
+import net.osmand.plus.search.ShowQuickSearchMode;
 import net.osmand.plus.settings.enums.HistorySource;
 import net.osmand.plus.track.fragments.TrackMenuFragment;
 import net.osmand.plus.track.fragments.TrackSelectSegmentBottomSheet;
@@ -37,6 +36,8 @@ import net.osmand.plus.track.helpers.GpxNavigationHelper;
 import net.osmand.plus.track.helpers.GpxSelectionHelper;
 import net.osmand.plus.utils.OsmAndFormatter;
 import net.osmand.plus.utils.UiUtilities;
+import net.osmand.shared.data.KQuadRect;
+import net.osmand.shared.gpx.GpxFile;
 import net.osmand.util.Algorithms;
 import net.osmand.util.MapUtils;
 
@@ -71,7 +72,7 @@ public class DashRecentsFragment extends DashLocationFragment implements OnSegme
 			closeDashboard();
 			if (getActivity() instanceof MapActivity) {
 				MapActivity mapActivity = (MapActivity) getActivity();
-				mapActivity.showQuickSearch(MapActivity.ShowQuickSearchMode.NEW, false);
+				mapActivity.getFragmentsHelper().showQuickSearch(ShowQuickSearchMode.NEW, false);
 			}
 		});
 
@@ -176,7 +177,7 @@ public class DashRecentsFragment extends DashLocationFragment implements OnSegme
 		}
 	}
 
-	private void navigateGpxFile(@NonNull GPXFile gpxFile, @NonNull MapActivity mapActivity) {
+	private void navigateGpxFile(@NonNull GpxFile gpxFile, @NonNull MapActivity mapActivity) {
 		if (TrackSelectSegmentBottomSheet.shouldShowForGpxFile(gpxFile)) {
 			FragmentManager fragmentManager = mapActivity.getSupportFragmentManager();
 			TrackSelectSegmentBottomSheet.showInstance(fragmentManager, gpxFile, this);
@@ -221,7 +222,7 @@ public class DashRecentsFragment extends DashLocationFragment implements OnSegme
 			String relativeGpxPath = pointDescription.getName();
 			File file = new File(app.getAppPath(GPX_INDEX_DIR), relativeGpxPath);
 			GpxSelectionHelper.getGpxFile(mapActivity, file, false, gpxFile -> {
-				QuadRect gpxRect = gpxFile.getRect();
+				KQuadRect gpxRect = gpxFile.getRect();
 				LatLon latLon = new LatLon(gpxRect.centerY(), gpxRect.centerX());
 				DashLocationView locationView = new DashLocationView(directionArrow, distanceText, latLon);
 				distances.add(locationView);
@@ -236,7 +237,7 @@ public class DashRecentsFragment extends DashLocationFragment implements OnSegme
 	}
 
 	@Override
-	public void onSegmentSelect(@NonNull GPXFile gpxFile, int selectedSegment) {
+	public void onSegmentSelect(@NonNull GpxFile gpxFile, int selectedSegment) {
 		MapActivity mapActivity = getMapActivity();
 		if (mapActivity != null) {
 			GpxNavigationHelper.startNavigationForSegment(gpxFile, selectedSegment, mapActivity);
@@ -245,7 +246,7 @@ public class DashRecentsFragment extends DashLocationFragment implements OnSegme
 	}
 
 	@Override
-	public void onRouteSelected(@NonNull GPXFile gpxFile, int selectedRoute) {
+	public void onRouteSelected(@NonNull GpxFile gpxFile, int selectedRoute) {
 		MapActivity mapActivity = getMapActivity();
 		if (mapActivity != null) {
 			GpxNavigationHelper.startNavigationForRoute(gpxFile, selectedRoute, mapActivity);

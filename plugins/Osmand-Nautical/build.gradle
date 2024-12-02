@@ -1,9 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-	compileSdkVersion 33
-	buildToolsVersion "30.0.3"
+	compileSdk 34
+	buildToolsVersion = "34.0.0"
 
+	namespace = "net.osmand.nauticalPlugin"
 	signingConfigs {
 		development {
 			storeFile file("../../keystores/debug.keystore")
@@ -20,8 +21,8 @@ android {
 	}
 
 	defaultConfig {
-		minSdkVersion 15
-		targetSdkVersion 33
+		minSdkVersion 24
+		targetSdkVersion 34
 	}
 
 	lintOptions {
@@ -36,7 +37,6 @@ android {
 			aidl.srcDirs = ["src"]
 			java.srcDirs = ["src"]
 			resources.srcDirs = ["src"]
-			renderscript.srcDirs = ["src"]
 			res.srcDirs = ["res"]
 			assets.srcDirs = ["assets"]
 		}
@@ -49,6 +49,9 @@ android {
 		release {
 			signingConfig signingConfigs.release
 		}
+	}
+	buildFeatures {
+		aidl true
 	}
 }
 
@@ -63,6 +66,6 @@ repositories {
 }
 
 dependencies {
-	implementation 'androidx.appcompat:appcompat:1.5.1'
-	implementation 'com.google.android.material:material:1.7.0'
+	implementation 'androidx.appcompat:appcompat:1.6.1'
+	implementation 'com.google.android.material:material:1.9.0'
 }

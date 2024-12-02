@@ -4,6 +4,10 @@
 	android:installLocation="auto"
 	package="net.osmand.plus">
 
+	<permission
+		android:name="${applicationId}.SERVICE_PERMISSION"
+		android:protectionLevel="signature" />
+
 	<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 	<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 	<uses-permission android:name="android.permission.ACCESS_LOCATION_EXTRA_COMMANDS" />
@@ -18,12 +22,14 @@
 	<uses-permission android:name="android.permission.VIBRATE" />
 	<uses-permission android:name="android.permission.RECORD_AUDIO" />
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
 
 	<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
 	<uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES"/>
 	<uses-permission android:name="androidx.car.app.ACCESS_SURFACE"/>
-	<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
 	<uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
 	<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -102,8 +108,9 @@
 				android:resource="@xml/paths" />
 		</provider>
 
-		<receiver android:name="net.osmand.plus.notifications.NotificationDismissReceiver" />
-		<receiver android:name="net.osmand.plus.liveupdates.LiveUpdatesAlarmReceiver" />
+		<receiver android:name="net.osmand.plus.mapcontextmenu.other.ShareSheetReceiver" android:exported="false" />
+		<receiver android:name="net.osmand.plus.notifications.NotificationDismissReceiver" android:exported="false" />
+		<receiver android:name="net.osmand.plus.liveupdates.LiveUpdatesAlarmReceiver" android:exported="false" />
 		<receiver android:name="net.osmand.plus.plugins.audionotes.MediaRemoteControlReceiver"
 			android:exported="true">
 			<intent-filter>
@@ -562,6 +569,15 @@
 
 			<intent-filter>
 				<action android:name="android.intent.action.VIEW" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<category android:name="android.intent.category.BROWSABLE" />
+				<data android:scheme="https" />
+				<data android:host="osmand.net" android:pathPrefix="/redirect-url"/>
+
+			</intent-filter>
+
+			<intent-filter>
+				<action android:name="android.intent.action.VIEW" />
 
 				<category android:name="android.intent.category.DEFAULT" />
 				<category android:name="android.intent.category.BROWSABLE" />
@@ -577,7 +593,7 @@
 
 		</activity>
 
-		<activity android:name="net.osmand.plus.activities.HelpActivity" />
+		<activity android:name="net.osmand.plus.help.HelpActivity" />
 		<activity android:name="net.osmand.plus.myplaces.MyPlacesActivity" android:windowSoftInputMode="adjustPan" />
 		<activity android:name="net.osmand.plus.activities.ContributionVersionActivity" android:configChanges="keyboardHidden|orientation" android:label="@string/contribution_activity" />
 
@@ -603,10 +619,12 @@
 				<data android:host="www.openstreetmap.org" android:pathPrefix="/query"/>
 				<data android:host="www.openstreetmap.org" android:pathPrefix="/go"/>
 				<data android:host="www.openstreetmap.org" android:pathPrefix="/search"/>
+				<data android:host="www.openstreetmap.org" android:pathPrefix="/directions" />
 				<data android:host="openstreetmap.org" android:path="/"/> <!-- catches /#map=... -->
 				<data android:host="openstreetmap.org" android:pathPrefix="/query"/>
 				<data android:host="openstreetmap.org" android:pathPrefix="/go"/>
 				<data android:host="openstreetmap.org" android:pathPrefix="/search"/>
+				<data android:host="openstreetmap.org" android:pathPrefix="/directions" />
 				<data android:host="osm.org" />
 				<data android:host="map.baidu.cn" />
 				<data android:host="map.baidu.com" />
@@ -1116,15 +1134,12 @@
 
 		<!-- keep android:process on a separate line !! -->
 		<service
-			android:process="net.osmand.plus"
 			android:label="@string/process_navigation_service"
 			android:name="net.osmand.plus.NavigationService"
 			android:exported="true"
+			android:permission="${applicationId}.SERVICE_PERMISSION"
 			android:foregroundServiceType="location"
 			android:stopWithTask="false">
-			<intent-filter>
-				<action android:name="net.osmand.plus.NavigationService" />
-			</intent-filter>
 		</service>
 
 		<service android:name="net.osmand.aidl.OsmandAidlService" android:exported="true" >
@@ -1144,7 +1159,10 @@
 		<service
 			android:name="net.osmand.plus.download.DownloadService"
 			android:label="@string/process_downloading_service"
-			android:stopWithTask="false" />
+			android:stopWithTask="false"
+			android:exported="true"
+			android:permission="${applicationId}.SERVICE_PERMISSION"
+			android:foregroundServiceType="dataSync" />
 
 		<meta-data android:name="com.google.android.gms.car.application"
 			android:resource="@xml/car_app_desc"
@@ -1155,7 +1173,9 @@
 			tools:ignore="MetadataTagInsideApplicationTag" />
 
 		<service
+			android:process="${applicationId}"
 			android:name="net.osmand.plus.auto.NavigationCarAppService"
+			android:foregroundServiceType="location"
 			android:exported="true">
 
 			<intent-filter>
@@ -1163,11 +1183,6 @@
 				<category android:name="androidx.car.app.category.NAVIGATION"/>
 			</intent-filter>
 		</service>
-
-		<receiver android:name="net.osmand.plus.notifications.NotificationDismissReceiver" />
-
-		<receiver android:name="net.osmand.plus.liveupdates.LiveUpdatesAlarmReceiver"/>
-
 	</application>
 
 </manifest> 

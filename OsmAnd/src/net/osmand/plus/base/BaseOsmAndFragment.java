@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
 import android.view.animation.Animation;
 
 import androidx.annotation.ColorInt;
@@ -11,6 +13,7 @@ import androidx.annotation.ColorRes;
 import androidx.annotation.DimenRes;
 import androidx.annotation.Dimension;
 import androidx.annotation.DrawableRes;
+import androidx.annotation.LayoutRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -19,6 +22,7 @@ import androidx.fragment.app.Fragment;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.activities.OsmandActionBarActivity;
+import net.osmand.plus.helpers.RequestMapThemeParams;
 import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.utils.ColorUtilities;
 import net.osmand.plus.utils.UiUtilities;
@@ -56,22 +60,43 @@ public class BaseOsmAndFragment extends Fragment implements TransitionAnimator {
 		return false;
 	}
 
+	@NonNull
+	protected View inflate(@LayoutRes int layoutResId, @Nullable ViewGroup parent) {
+		return inflate(layoutResId, parent, false);
+	}
+
+	@NonNull
+	protected View inflate(@LayoutRes int layoutResId, @Nullable ViewGroup parent, boolean attachToRoot) {
+		return themedInflater.inflate(layoutResId, parent, attachToRoot);
+	}
+
 	@Override
 	public void onResume() {
 		super.onResume();
 		Activity activity = getActivity();
 		if (activity != null) {
-			int colorId = getStatusBarColorId();
-			if (colorId != -1) {
-				if (activity instanceof MapActivity) {
-					((MapActivity) activity).updateStatusBarColor();
-				} else {
-					statusBarColor = activity.getWindow().getStatusBarColor();
-					activity.getWindow().setStatusBarColor(ContextCompat.getColor(activity, colorId));
-				}
-			}
+			updateStatusBar(activity);
 			if (!isFullScreenAllowed() && activity instanceof MapActivity) {
 				((MapActivity) activity).exitFromFullScreen(getView());
+			}
+		}
+	}
+
+	public void updateStatusBar() {
+		Activity activity = getActivity();
+		if (activity != null) {
+			updateStatusBar(activity);
+		}
+	}
+
+	protected void updateStatusBar(@NonNull Activity activity) {
+		int colorId = getStatusBarColorId();
+		if (colorId != -1) {
+			if (activity instanceof MapActivity) {
+				((MapActivity) activity).updateStatusBarColor();
+			} else {
+				statusBarColor = activity.getWindow().getStatusBarColor();
+				activity.getWindow().setStatusBarColor(ContextCompat.getColor(activity, colorId));
 			}
 		}
 	}
@@ -127,6 +152,10 @@ public class BaseOsmAndFragment extends Fragment implements TransitionAnimator {
 		return -1;
 	}
 
+	public boolean getContentStatusBarNightMode() {
+		return true;
+	}
+
 	protected boolean isFullScreenAllowed() {
 		return true;
 	}
@@ -168,6 +197,7 @@ public class BaseOsmAndFragment extends Fragment implements TransitionAnimator {
 	}
 
 	protected boolean isNightMode(boolean usedOnMap) {
-		return app.getDaynightHelper().isNightMode(usedOnMap);
+		RequestMapThemeParams params = new RequestMapThemeParams().markIgnoreExternalProvider();
+		return app.getDaynightHelper().isNightMode(usedOnMap, params);
 	}
 }

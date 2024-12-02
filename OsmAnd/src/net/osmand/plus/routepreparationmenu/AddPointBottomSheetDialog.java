@@ -1,5 +1,6 @@
 package net.osmand.plus.routepreparationmenu;
 
+
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
@@ -38,7 +39,6 @@ import net.osmand.plus.base.bottomsheetmenu.SimpleBottomSheetItem;
 import net.osmand.plus.base.bottomsheetmenu.simpleitems.DividerHalfItem;
 import net.osmand.plus.base.bottomsheetmenu.simpleitems.TitleItem;
 import net.osmand.plus.helpers.AndroidUiHelper;
-import net.osmand.plus.helpers.FontCache;
 import net.osmand.plus.helpers.MapMarkerDialogHelper;
 import net.osmand.plus.helpers.TargetPointsHelper;
 import net.osmand.plus.helpers.TargetPointsHelper.TargetPoint;
@@ -49,10 +49,12 @@ import net.osmand.plus.mapmarkers.MapMarkersHelper;
 import net.osmand.plus.myplaces.favorites.FavoritesListener;
 import net.osmand.plus.myplaces.favorites.FavouritesHelper;
 import net.osmand.plus.routepreparationmenu.MapRouteInfoMenu.PointType;
-import net.osmand.plus.search.QuickSearchDialogFragment;
+import net.osmand.plus.search.ShowQuickSearchMode;
+import net.osmand.plus.search.dialogs.QuickSearchDialogFragment;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.ColorUtilities;
-import net.osmand.plus.views.PointImageDrawable;
+import net.osmand.plus.utils.FontCache;
+import net.osmand.plus.views.PointImageUtils;
 import net.osmand.plus.widgets.style.CustomTypefaceSpan;
 import net.osmand.util.Algorithms;
 
@@ -185,7 +187,7 @@ public class AddPointBottomSheetDialog extends MenuBottomSheetDialogFragment {
 			public void onClick(View v) {
 				MapActivity mapActivity = (MapActivity) getActivity();
 				if (mapActivity != null) {
-					mapActivity.showQuickSearch(getSearchMode(), QuickSearchDialogFragment.QuickSearchTab.HISTORY);
+					mapActivity.getFragmentsHelper().showQuickSearch(getSearchMode(), QuickSearchDialogFragment.QuickSearchTab.HISTORY);
 				}
 				dismiss();
 			}
@@ -195,7 +197,7 @@ public class AddPointBottomSheetDialog extends MenuBottomSheetDialogFragment {
 			public void onClick(View v) {
 				MapActivity mapActivity = (MapActivity) getActivity();
 				if (mapActivity != null) {
-					mapActivity.showQuickSearch(getSearchMode(), false);
+					mapActivity.getFragmentsHelper().showQuickSearch(getSearchMode(), false);
 				}
 				dismiss();
 			}
@@ -203,20 +205,20 @@ public class AddPointBottomSheetDialog extends MenuBottomSheetDialogFragment {
 		items.add(new BaseBottomSheetItem.Builder().setCustomView(searchView).create());
 	}
 
-	private MapActivity.ShowQuickSearchMode getSearchMode() {
+	private ShowQuickSearchMode getSearchMode() {
 		switch (pointType) {
 			case START:
-				return MapActivity.ShowQuickSearchMode.START_POINT_SELECTION;
+				return ShowQuickSearchMode.START_POINT_SELECTION;
 			case TARGET:
-				return MapActivity.ShowQuickSearchMode.DESTINATION_SELECTION;
+				return ShowQuickSearchMode.DESTINATION_SELECTION;
 			case INTERMEDIATE:
-				return MapActivity.ShowQuickSearchMode.INTERMEDIATE_SELECTION;
+				return ShowQuickSearchMode.INTERMEDIATE_SELECTION;
 			case HOME:
-				return MapActivity.ShowQuickSearchMode.HOME_POINT_SELECTION;
+				return ShowQuickSearchMode.HOME_POINT_SELECTION;
 			case WORK:
-				return MapActivity.ShowQuickSearchMode.WORK_POINT_SELECTION;
+				return ShowQuickSearchMode.WORK_POINT_SELECTION;
 			default:
-				return MapActivity.ShowQuickSearchMode.START_POINT_SELECTION;
+				return ShowQuickSearchMode.START_POINT_SELECTION;
 		}
 	}
 
@@ -334,7 +336,7 @@ public class AddPointBottomSheetDialog extends MenuBottomSheetDialogFragment {
 		int startIndex = titleS.indexOf(start);
 		int destinationIndex = titleS.indexOf(destination);
 		if (startIndex != -1 && destinationIndex != -1) {
-			Typeface typeface = FontCache.getRobotoMedium(getContext());
+			Typeface typeface = FontCache.getMediumFont();
 			titleSpan.setSpan(new CustomTypefaceSpan(typeface), startIndex, startIndex + start.length(), 0);
 			titleSpan.setSpan(new CustomTypefaceSpan(typeface), destinationIndex, destinationIndex + destination.length(), 0);
 		}
@@ -676,7 +678,7 @@ public class AddPointBottomSheetDialog extends MenuBottomSheetDialogFragment {
 						? BackgroundType.CIRCLE
 						: point.getBackgroundType();
 
-				Drawable pointIcon = PointImageDrawable.getOrCreate(app, pointColor, false,
+				Drawable pointIcon = PointImageUtils.getOrCreate(app, pointColor, false,
 						false, pointIconRes, backgroundType);
 				favoriteViewHolder.icon.setImageDrawable(pointIcon);
 

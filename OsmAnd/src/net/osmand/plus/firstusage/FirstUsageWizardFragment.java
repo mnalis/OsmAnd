@@ -1,6 +1,6 @@
 package net.osmand.plus.firstusage;
 
-import static net.osmand.plus.importfiles.ImportHelper.ImportType.SETTINGS;
+import static net.osmand.plus.importfiles.ImportType.SETTINGS;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -11,7 +11,6 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.Spanned;
-import android.text.TextPaint;
 import android.text.method.LinkMovementMethod;
 import android.text.style.ClickableSpan;
 import android.text.style.ForegroundColorSpan;
@@ -37,8 +36,8 @@ import net.osmand.binary.BinaryMapDataObject;
 import net.osmand.data.LatLon;
 import net.osmand.map.OsmandRegions;
 import net.osmand.map.WorldRegion;
+import net.osmand.plus.AppInitializeListener;
 import net.osmand.plus.AppInitializer;
-import net.osmand.plus.AppInitializer.AppInitializeListener;
 import net.osmand.plus.OsmAndLocationProvider;
 import net.osmand.plus.OsmAndLocationProvider.OsmAndLocationListener;
 import net.osmand.plus.OsmandApplication;
@@ -55,7 +54,6 @@ import net.osmand.plus.download.DownloadIndexesThread.DownloadEvents;
 import net.osmand.plus.download.DownloadValidationManager;
 import net.osmand.plus.download.IndexItem;
 import net.osmand.plus.helpers.AndroidUiHelper;
-import net.osmand.plus.helpers.FontCache;
 import net.osmand.plus.resources.ResourceManager;
 import net.osmand.plus.settings.datastorage.DataStorageFragment.StorageSelectionListener;
 import net.osmand.plus.settings.datastorage.DataStorageHelper;
@@ -65,9 +63,11 @@ import net.osmand.plus.settings.fragments.SettingsScreenType;
 import net.osmand.plus.utils.AndroidNetworkUtils;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.ColorUtilities;
+import net.osmand.plus.utils.FontCache;
 import net.osmand.plus.utils.UiUtilities;
-import net.osmand.plus.widgets.dialogbutton.DialogButtonType;
 import net.osmand.plus.widgets.dialogbutton.DialogButton;
+import net.osmand.plus.widgets.dialogbutton.DialogButtonType;
+import net.osmand.plus.widgets.style.CustomClickableSpan;
 import net.osmand.plus.widgets.style.CustomTypefaceSpan;
 import net.osmand.util.Algorithms;
 import net.osmand.util.MapUtils;
@@ -75,22 +75,18 @@ import net.osmand.util.MapUtils;
 import org.json.JSONObject;
 
 import java.io.IOException;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.*;
 
 public class FirstUsageWizardFragment extends BaseOsmAndFragment implements OsmAndLocationListener,
-		AppInitializeListener, DownloadEvents, StorageSelectionListener {
+		AppInitializeListener, DownloadEvents, StorageSelectionListener, FirstUsageActionsListener {
 
 	public static final String TAG = FirstUsageWizardFragment.class.getSimpleName();
 
 	public static final String FIRST_USAGE = "first_usage";
 	public static final String SHOW_OSMAND_WELCOME_SCREEN = "show_osmand_welcome_screen";
 	public static final int FIRST_USAGE_LOCATION_PERMISSION = 300;
+	private static final int NO_MAP_ZOOM_LEVEL = 9;
+	private static final int DOWNLOAD_MAP_ZOOM_LEVEL = 13;
 
 	private DownloadIndexesThread downloadThread;
 	private DownloadValidationManager validationManager;
@@ -130,7 +126,7 @@ public class FirstUsageWizardFragment extends BaseOsmAndFragment implements OsmA
 
 	public void setWizardType(WizardType wizardType, boolean updateWizardView) {
 		this.wizardType = wizardType;
-		if (updateWizardView) {
+		if (updateWizardView && isAdded()) {
 			updateWizardView();
 			doWizardTypeTask();
 			updateSkipButton();
@@ -272,7 +268,7 @@ public class FirstUsageWizardFragment extends BaseOsmAndFragment implements OsmA
 				wizardButton.setTitleId(R.string.go_to_map);
 
 				wizardButton.setOnClickListener(view -> {
-					showOnMap(new LatLon(location.getLatitude(), location.getLongitude()), 13);
+					showOnMap(new LatLon(location.getLatitude(), location.getLongitude()));
 				});
 				break;
 		}
@@ -306,7 +302,7 @@ public class FirstUsageWizardFragment extends BaseOsmAndFragment implements OsmA
 		AppCompatButton skipButton = view.findViewById(R.id.skip_button);
 		skipButton.setOnClickListener(v -> {
 			if (location != null) {
-				showOnMap(new LatLon(location.getLatitude(), location.getLongitude()), 13);
+				showOnMap(new LatLon(location.getLatitude(), location.getLongitude()));
 			} else {
 				closeWizard();
 			}
@@ -447,13 +443,21 @@ public class FirstUsageWizardFragment extends BaseOsmAndFragment implements OsmA
 	@Override
 	public void onResume() {
 		super.onResume();
-		requireMapActivity().disableDrawer();
+
+		MapActivity activity = getMapActivity();
+		if (activity != null) {
+			activity.disableDrawer();
+		}
 	}
 
 	@Override
 	public void onPause() {
 		super.onPause();
-		requireMapActivity().enableDrawer();
+
+		MapActivity activity = getMapActivity();
+		if (activity != null) {
+			activity.enableDrawer();
+		}
 	}
 
 	@Override
@@ -530,11 +534,10 @@ public class FirstUsageWizardFragment extends BaseOsmAndFragment implements OsmA
 		DataStorageHelper.updateDownloadIndexes(app);
 	}
 
-	private void showOnMap(LatLon mapCenter, int mapZoom) {
+	private void showOnMap(LatLon mapCenter) {
 		MapActivity mapActivity = (MapActivity) getActivity();
 		if (mapActivity != null) {
 			app.getOsmandMap().setMapLocation(mapCenter.getLatitude(), mapCenter.getLongitude());
-			app.getOsmandMap().getMapView().setIntZoom(mapZoom);
 		}
 		closeWizard();
 	}
@@ -625,8 +628,19 @@ public class FirstUsageWizardFragment extends BaseOsmAndFragment implements OsmA
 		}
 	}
 
+	private void setProperZoom() {
+		int zoom;
+		if (app.getResourceManager().isAnyMapInstalled() || (mapIndexItem != null && app.getDownloadThread().isDownloading(mapIndexItem))) {
+			zoom = DOWNLOAD_MAP_ZOOM_LEVEL;
+		} else {
+			zoom = NO_MAP_ZOOM_LEVEL;
+		}
+		app.getOsmandMap().getMapView().setIntZoom(zoom);
+	}
+
 	public void closeWizard() {
 		app.getSettings().SHOW_OSMAND_WELCOME_SCREEN.set(false);
+		setProperZoom();
 		FragmentActivity activity = getActivity();
 		if (activity != null) {
 			activity.getSupportFragmentManager()
@@ -686,22 +700,15 @@ public class FirstUsageWizardFragment extends BaseOsmAndFragment implements OsmA
 		int endInd = startInd + part.length();
 		int color = ColorUtilities.getColor(app, R.color.active_color_primary_light);
 		ForegroundColorSpan colorSpan = new ForegroundColorSpan(color);
-		Typeface typeface = FontCache.getRobotoMedium(getContext());
+		Typeface typeface = FontCache.getMediumFont();
 		CustomTypefaceSpan typefaceSpan = new CustomTypefaceSpan(typeface);
-		ClickableSpan clickableSpan = new ClickableSpan() {
-
+		ClickableSpan clickableSpan = new CustomClickableSpan() {
 			@Override
 			public void onClick(@NonNull View widget) {
 				FragmentActivity activity = getActivity();
 				if (activity != null) {
 					AndroidUtils.openUrl(activity, urlId, false);
 				}
-			}
-
-			@Override
-			public void updateDrawState(@NonNull TextPaint ds) {
-				super.updateDrawState(ds);
-				ds.setUnderlineText(false);
 			}
 		};
 		text.setSpan(colorSpan, startInd, endInd, Spanned.SPAN_INCLUSIVE_INCLUSIVE);
@@ -715,9 +722,8 @@ public class FirstUsageWizardFragment extends BaseOsmAndFragment implements OsmA
 		return ColorUtilities.getListBgColorId(deviceNightMode);
 	}
 
-	@NonNull
-	protected MapActivity requireMapActivity() {
-		return (MapActivity) requireActivity();
+	public boolean getContentStatusBarNightMode() {
+		return nightMode;
 	}
 
 	public void showSearchLocationWizard(boolean updateWizardView, boolean searchByIp) {
@@ -749,82 +755,91 @@ public class FirstUsageWizardFragment extends BaseOsmAndFragment implements OsmA
 		setWizardType(WizardType.MAP_DOWNLOADED, updateWizardView);
 	}
 
-	public FirstUsageActionsListener getFirstUsageActionsListener() {
-		return new FirstUsageActionsListener() {
-			@Override
-			public void onSelectCountry() {
+	@Override
+	public void processActionClick(@NonNull FirstUsageAction action) {
+		switch (action) {
+			case SELECT_COUNTRY:
 				searchCountryMap();
-			}
+				break;
+			case DETERMINE_LOCATION:
+				determineLocation();
+				break;
+			case RESTORE_FROM_CLOUD:
+				restoreFromCloud();
+				break;
+			case RESTORE_FROM_FILE:
+				restoreFromFile();
+				break;
+			case SELECT_STORAGE_FOLDER:
+				selectStorageFolder();
+				break;
+		}
+	}
 
-			@Override
-			public void onDetermineLocation() {
-				if (!OsmAndLocationProvider.isLocationPermissionAvailable(activity)) {
-					location = null;
-					ActivityCompat.requestPermissions(activity,
-							new String[] {Manifest.permission.ACCESS_FINE_LOCATION,
-									Manifest.permission.ACCESS_COARSE_LOCATION},
-							FIRST_USAGE_LOCATION_PERMISSION);
-				} else {
-					findLocation(activity, false, true);
-				}
-			}
+	public void determineLocation() {
+		if (!OsmAndLocationProvider.isLocationPermissionAvailable(activity)) {
+			location = null;
+			ActivityCompat.requestPermissions(activity,
+					new String[] {Manifest.permission.ACCESS_FINE_LOCATION,
+							Manifest.permission.ACCESS_COARSE_LOCATION},
+					FIRST_USAGE_LOCATION_PERMISSION);
+		} else {
+			findLocation(activity, false, true);
+		}
+	}
 
-			@Override
-			public void onRestoreFromCloud() {
-				if (app.getBackupHelper().isRegistered()) {
-					BackupCloudFragment.showInstance(activity.getSupportFragmentManager());
-				} else {
-					BackupAuthorizationFragment.showInstance(activity.getSupportFragmentManager());
-				}
-			}
+	public void restoreFromCloud() {
+		if (app.getBackupHelper().isRegistered()) {
+			BackupCloudFragment.showInstance(activity.getSupportFragmentManager());
+		} else {
+			BackupAuthorizationFragment.showInstance(activity.getSupportFragmentManager());
+		}
+	}
 
-			@Override
-			public void onRestoreFromFile() {
-				MapActivity mapActivity = requireMapActivity();
-				mapActivity.getImportHelper().chooseFileToImport(SETTINGS, null);
-			}
+	public void restoreFromFile() {
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			mapActivity.getImportHelper().chooseFileToImport(SETTINGS);
+		}
+	}
 
-			@Override
-			public void onSelectStorageFolder() {
-				FragmentActivity activity = getActivity();
-				if (activity != null) {
-					Bundle args = new Bundle();
-					args.putBoolean(FIRST_USAGE, true);
-					BaseSettingsFragment.showInstance(activity, SettingsScreenType.DATA_STORAGE, null, args, FirstUsageWizardFragment.this);
-				}
-			}
-		};
+	public void selectStorageFolder() {
+		FragmentActivity activity = getActivity();
+		if (activity != null) {
+			Bundle args = new Bundle();
+			args.putBoolean(FIRST_USAGE, true);
+			BaseSettingsFragment.showInstance(activity, SettingsScreenType.DATA_STORAGE, null, args, FirstUsageWizardFragment.this);
+		}
+	}
+
+	@Nullable
+	protected MapActivity getMapActivity() {
+		FragmentActivity activity = getActivity();
+		if (activity instanceof MapActivity) {
+			return (MapActivity) activity;
+		}
+		return null;
 	}
 
 	private void logError(String msg, Throwable e) {
 		Log.e(TAG, "Error: " + msg, e);
 	}
 
-	public static boolean showFragment(@Nullable FragmentActivity activity) {
-		if (!wizardClosed && activity != null) {
-			FragmentManager fragmentManager = activity.getSupportFragmentManager();
-			if (!fragmentManager.isStateSaved()) {
-				FirstUsageWizardFragment fragment = new FirstUsageWizardFragment();
-				fragment.showAppropriateWizard(activity, false);
-				activity.getSupportFragmentManager()
-						.beginTransaction()
-						.replace(R.id.fragmentContainer, fragment, TAG)
-						.commitAllowingStateLoss();
-				return true;
-			}
+	public static boolean showFragment(@NonNull FragmentActivity activity) {
+		FragmentManager manager = activity.getSupportFragmentManager();
+		if (!wizardClosed && AndroidUtils.isFragmentCanBeAdded(manager, TAG, true)) {
+			FirstUsageWizardFragment fragment = new FirstUsageWizardFragment();
+			fragment.showAppropriateWizard(activity, false);
+			activity.getSupportFragmentManager()
+					.beginTransaction()
+					.replace(R.id.fragmentContainer, fragment, TAG)
+					.commitAllowingStateLoss();
+			return true;
 		}
 		return false;
 	}
 }
 
 interface FirstUsageActionsListener {
-	void onSelectCountry();
-
-	void onDetermineLocation();
-
-	void onRestoreFromCloud();
-
-	void onRestoreFromFile();
-
-	void onSelectStorageFolder();
+	void processActionClick(@NonNull FirstUsageAction action);
 }

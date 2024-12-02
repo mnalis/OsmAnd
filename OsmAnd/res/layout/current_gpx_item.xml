@@ -7,19 +7,15 @@
 	android:background="?attr/list_background_color"
 	android:orientation="vertical">
 
-	<include
-		android:id="@+id/top_divider"
-		layout="@layout/simple_divider_item" />
-
 	<include layout="@layout/track_list_item" />
 
 	<LinearLayout
 		android:layout_width="wrap_content"
 		android:layout_height="wrap_content"
 		android:layout_marginTop="@dimen/content_padding_small_half_inverted"
-		android:paddingStart="@dimen/settings_divider_margin_start"
-		android:paddingEnd="@dimen/content_padding"
+		android:paddingStart="@dimen/divider_color_light_margin_start"
 		android:paddingTop="@dimen/content_padding_small_half"
+		android:paddingEnd="@dimen/content_padding"
 		android:paddingBottom="@dimen/content_padding_small">
 
 		<net.osmand.plus.widgets.dialogbutton.DialogButton
@@ -27,7 +23,7 @@
 			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
 			app:dialogButtonType="secondaryActive"
-			tools:dialogButtonTitle="@string/shortcut_start_recording"/>
+			tools:dialogButtonTitle="@string/shortcut_start_recording" />
 
 		<Space
 			android:layout_width="@dimen/content_padding_round_medium"
@@ -38,7 +34,7 @@
 			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
 			app:dialogButtonType="secondaryActive"
-			tools:dialogButtonTitle="@string/shared_string_save"/>
+			tools:dialogButtonTitle="@string/shared_string_save" />
 
 	</LinearLayout>
 

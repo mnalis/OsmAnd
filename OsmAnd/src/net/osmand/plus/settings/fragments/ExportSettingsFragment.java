@@ -1,5 +1,6 @@
 package net.osmand.plus.settings.fragments;
 
+import static net.osmand.plus.settings.backend.backup.exporttype.ExportType.MAP_SOURCES;
 import static net.osmand.plus.settings.fragments.BaseSettingsFragment.APP_MODE_KEY;
 
 import android.app.ProgressDialog;
@@ -21,12 +22,16 @@ import com.google.android.material.appbar.CollapsingToolbarLayout;
 
 import net.osmand.IndexConstants;
 import net.osmand.PlatformUtil;
+import net.osmand.map.ITileSource;
+import net.osmand.map.TileSourceManager;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
+import net.osmand.plus.resources.SQLiteTileSource;
 import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.settings.backend.ApplicationModeBean;
-import net.osmand.plus.settings.backend.ExportSettingsType;
 import net.osmand.plus.settings.backend.backup.FileSettingsHelper.SettingsExportListener;
+import net.osmand.plus.settings.backend.backup.exporttype.ExportType;
+import net.osmand.plus.settings.backend.backup.exporttype.MapSourcesExportType;
 import net.osmand.plus.settings.backend.backup.items.FileSettingsItem;
 import net.osmand.plus.settings.backend.backup.items.SettingsItem;
 import net.osmand.plus.utils.AndroidUtils;
@@ -81,7 +86,7 @@ public class ExportSettingsFragment extends BaseSettingsListFragment {
 			progressValue = savedInstanceState.getInt(PROGRESS_VALUE_KEY);
 		}
 		exportMode = true;
-		dataList = app.getFileSettingsHelper().getSettingsByCategory(true, true);
+		dataList = app.getFileSettingsHelper().collectCategorizedExportData(true, true);
 
 		if (savedInstanceState == null) {
 			if (!globalExport) {
@@ -89,24 +94,48 @@ public class ExportSettingsFragment extends BaseSettingsListFragment {
 			}
 			Bundle args = getArguments();
 			if (args != null && args.containsKey(SELECTED_TYPES)) {
-				addSelectedTypes((Map<ExportSettingsType, List<?>>) AndroidUtils.getSerializable(args, SELECTED_TYPES, HashMap.class));
+				addSelectedTypes((Map<ExportType, List<?>>) AndroidUtils.getSerializable(args, SELECTED_TYPES, HashMap.class));
 			}
 		}
 	}
 
-	private void addSelectedTypes(@Nullable Map<ExportSettingsType, List<?>> selectedTypes) {
+	private void addSelectedTypes(@Nullable Map<ExportType, List<?>> selectedTypes) {
 		if (!Algorithms.isEmpty(selectedTypes)) {
-			for (Map.Entry<ExportSettingsType, List<?>> entry : selectedTypes.entrySet()) {
-				ExportSettingsType settingsType = entry.getKey();
+			for (Map.Entry<ExportType, List<?>> entry : selectedTypes.entrySet()) {
+				ExportType exportType = entry.getKey();
 				List<?> items = entry.getValue();
+
+				if (exportType == MAP_SOURCES && !Algorithms.isEmpty(items)) {
+					items = convertTileSources(items);
+				}
 				if (items == null) {
-					items = getItemsForType(settingsType);
+					items = getItemsForType(exportType);
 				}
 				if (!Algorithms.isEmpty(items)) {
-					selectedItemsMap.put(settingsType, items);
+					selectedItemsMap.put(exportType, items);
 				}
 			}
 		}
+	}
+
+	@NonNull
+	private List<ITileSource> convertTileSources(@NonNull List<?> items) {
+		List<ITileSource> sources = new ArrayList<>();
+		for (Object item : items) {
+			if (item instanceof File) {
+				File file = (File) item;
+				ITileSource template;
+				if (file.getName().endsWith(SQLiteTileSource.EXT)) {
+					template = new SQLiteTileSource(app, file, TileSourceManager.getKnownSourceTemplates());
+				} else {
+					template = TileSourceManager.createTileSourceTemplate(file);
+				}
+				if (!MapSourcesExportType.shouldSkipMapSource(template)) {
+					sources.add(template);
+				}
+			}
+		}
+		return sources;
 	}
 
 	@Nullable
@@ -162,19 +191,19 @@ public class ExportSettingsFragment extends BaseSettingsListFragment {
 
 		Bundle args = getArguments();
 		MapActivity activity = getMapActivity();
-		if (activity != null && args != null && args.containsKey(SELECTED_TYPES)) {
+		if (activity != null && args != null && args.containsKey(SELECTED_TYPES) && !exportingStarted) {
 			activity.launchPrevActivityIntent();
 		}
 	}
 
 	private void updateSelectedProfile() {
-		List<Object> profileItems = getItemsForType(ExportSettingsType.PROFILE);
+		List<?> profileItems = getItemsForType(ExportType.PROFILE);
 		if (!Algorithms.isEmpty(profileItems)) {
 			for (Object item : profileItems) {
 				if (item instanceof ApplicationModeBean && appMode.getStringKey().equals(((ApplicationModeBean) item).stringKey)) {
 					List<Object> selectedProfiles = new ArrayList<>();
 					selectedProfiles.add(item);
-					selectedItemsMap.put(ExportSettingsType.PROFILE, selectedProfiles);
+					selectedItemsMap.put(ExportType.PROFILE, selectedProfiles);
 					break;
 				}
 			}
@@ -182,16 +211,14 @@ public class ExportSettingsFragment extends BaseSettingsListFragment {
 	}
 
 	private void prepareFile() {
-		if (app != null) {
-			exportingStarted = true;
-			exportStartTime = System.currentTimeMillis();
-			showExportProgressDialog();
-			File tempDir = FileUtils.getTempDir(app);
-			String fileName = getFileName();
-			List<SettingsItem> items = app.getFileSettingsHelper().prepareSettingsItems(adapter.getData(), Collections.emptyList(), true);
-			progress.setMax(getMaxProgress(items));
-			app.getFileSettingsHelper().exportSettings(tempDir, fileName, getSettingsExportListener(), items, true);
-		}
+		exportingStarted = true;
+		exportStartTime = System.currentTimeMillis();
+		showExportProgressDialog();
+		File tempDir = FileUtils.getTempDir(app);
+		String fileName = getFileName();
+		List<SettingsItem> items = app.getFileSettingsHelper().prepareSettingsItems(adapter.getData(), Collections.emptyList(), true);
+		progress.setMax(getMaxProgress(items));
+		app.getFileSettingsHelper().exportSettings(tempDir, fileName, getSettingsExportListener(), items, true);
 	}
 
 	private int getMaxProgress(List<SettingsItem> items) {
@@ -247,7 +274,6 @@ public class ExportSettingsFragment extends BaseSettingsListFragment {
 				@Override
 				public void onSettingsExportFinished(@NonNull File file, boolean succeed) {
 					dismissExportProgressDialog();
-					exportingStarted = false;
 					if (succeed) {
 						shareProfile(file);
 						dismissFragment();
@@ -308,7 +334,7 @@ public class ExportSettingsFragment extends BaseSettingsListFragment {
 	}
 
 	public static void showInstance(@NonNull FragmentManager manager, @NonNull ApplicationMode appMode,
-	                                @Nullable HashMap<ExportSettingsType, List<?>> selectedTypes, boolean globalExport) {
+	                                @Nullable HashMap<ExportType, List<?>> selectedTypes, boolean globalExport) {
 		if (AndroidUtils.isFragmentCanBeAdded(manager, TAG)) {
 			ExportSettingsFragment fragment = new ExportSettingsFragment();
 			fragment.appMode = appMode;

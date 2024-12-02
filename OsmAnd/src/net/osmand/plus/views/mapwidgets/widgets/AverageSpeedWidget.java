@@ -1,25 +1,33 @@
 package net.osmand.plus.views.mapwidgets.widgets;
 
+import static net.osmand.plus.views.mapwidgets.WidgetType.*;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.settings.backend.preferences.CommonPreference;
+import net.osmand.plus.utils.ColorUtilities;
 import net.osmand.plus.utils.OsmAndFormatter;
 import net.osmand.plus.utils.OsmAndFormatter.FormattedValue;
+import net.osmand.plus.utils.UiUtilities;
 import net.osmand.plus.views.layers.base.OsmandMapLayer.DrawSettings;
-import net.osmand.plus.views.mapwidgets.AverageSpeedComputer;
-import net.osmand.plus.views.mapwidgets.WidgetType;
+import net.osmand.plus.views.mapwidgets.WidgetsPanel;
+import net.osmand.plus.views.mapwidgets.utils.AverageSpeedComputer;
+import net.osmand.plus.widgets.popup.PopUpMenuItem;
 import net.osmand.util.Algorithms;
 
-public class AverageSpeedWidget extends TextInfoWidget {
+import java.util.ArrayList;
+import java.util.List;
+
+public class AverageSpeedWidget extends SimpleWidget {
 
 	private static final String MEASURED_INTERVAL_PREF_ID = "average_speed_measured_interval_millis";
 	private static final String SKIP_STOPS_PREF_ID = "average_speed_skip_stops";
 
 	private static final int UPDATE_INTERVAL_MILLIS = 1000;
-	private static final String DASH = "—";
 
 	private final AverageSpeedComputer averageSpeedComputer;
 
@@ -28,10 +36,10 @@ public class AverageSpeedWidget extends TextInfoWidget {
 
 	private long lastUpdateTime;
 
-	public AverageSpeedWidget(@NonNull MapActivity mapActivity, @Nullable String customId) {
-		super(mapActivity, WidgetType.AVERAGE_SPEED);
+	public AverageSpeedWidget(@NonNull MapActivity mapActivity, @Nullable String customId, @Nullable WidgetsPanel widgetsPanel) {
+		super(mapActivity, AVERAGE_SPEED, customId, widgetsPanel);
 		averageSpeedComputer = app.getAverageSpeedComputer();
-		setIcons(WidgetType.AVERAGE_SPEED);
+		setIcons(AVERAGE_SPEED);
 		measuredIntervalPref = registerMeasuredIntervalPref(customId);
 		skipStopsPref = registerSkipStopsPref(customId);
 	}
@@ -55,7 +63,7 @@ public class AverageSpeedWidget extends TextInfoWidget {
 	}
 
 	@Override
-	public void updateInfo(@Nullable DrawSettings drawSettings) {
+	protected void updateSimpleWidgetInfo(@Nullable DrawSettings drawSettings) {
 		long time = System.currentTimeMillis();
 		if (isUpdateNeeded() || time - lastUpdateTime > UPDATE_INTERVAL_MILLIS) {
 			lastUpdateTime = time;
@@ -68,17 +76,44 @@ public class AverageSpeedWidget extends TextInfoWidget {
 		boolean skipLowSpeed = skipStopsPref.get();
 		float averageSpeed = averageSpeedComputer.getAverageSpeed(measuredInterval, skipLowSpeed);
 		if (Float.isNaN(averageSpeed)) {
-			setText(DASH, null);
+			setText(NO_VALUE, null);
 		} else {
 			FormattedValue formattedAverageSpeed = OsmAndFormatter.getFormattedSpeedValue(averageSpeed, app);
 			setText(formattedAverageSpeed.value, formattedAverageSpeed.unit);
 		}
 	}
 
+	@Nullable
+	@Override
+	protected List<PopUpMenuItem> getWidgetActions() {
+		List<PopUpMenuItem> actions = new ArrayList<>();
+		UiUtilities uiUtilities = app.getUIUtilities();
+		int iconColor = ColorUtilities.getDefaultIconColor(app, nightMode);
+
+		actions.add(new PopUpMenuItem.Builder(app)
+				.setIcon(uiUtilities.getPaintedIcon(R.drawable.ic_action_reset_to_default_dark, iconColor))
+				.setTitleId(R.string.reset_average_speed)
+				.setOnClickListener(item -> resetAverageSpeed())
+				.showTopDivider(true)
+				.create());
+		return actions;
+	}
+
+	public void resetAverageSpeed() {
+		averageSpeedComputer.resetLocations();
+		setText(NO_VALUE, null);
+	}
+
 	@Override
 	public void copySettings(@NonNull ApplicationMode appMode, @Nullable String customId) {
-		registerMeasuredIntervalPref(customId).setModeValue(appMode, measuredIntervalPref.getModeValue(appMode));
-		registerSkipStopsPref(customId).setModeValue(appMode, skipStopsPref.getModeValue(appMode));
+		copySettingsFromMode(appMode, appMode, customId);
+	}
+
+	@Override
+	public void copySettingsFromMode(@NonNull ApplicationMode sourceAppMode, @NonNull ApplicationMode appMode, @Nullable String customId) {
+		super.copySettingsFromMode(sourceAppMode, appMode, customId);
+		registerMeasuredIntervalPref(customId).setModeValue(appMode, measuredIntervalPref.getModeValue(sourceAppMode));
+		registerSkipStopsPref(customId).setModeValue(appMode, skipStopsPref.getModeValue(sourceAppMode));
 	}
 
 	@NonNull

@@ -29,7 +29,7 @@ import net.osmand.telegram.utils.AndroidUtils
 import net.osmand.telegram.utils.GRAYSCALE_PHOTOS_DIR
 import net.osmand.telegram.utils.GRAYSCALE_PHOTOS_EXT
 import net.osmand.telegram.utils.OsmandApiUtils
-import org.drinkless.td.libcore.telegram.TdApi
+import org.drinkless.tdlib.TdApi
 import java.io.File
 import java.lang.ref.WeakReference
 import java.util.*
@@ -484,6 +484,7 @@ class MainActivity : AppCompatActivity(), TelegramListener, ActionButtonsListene
 			LoginDialogType.ENTER_PHONE_NUMBER -> telegramAuthorizationRequestHandler?.applyAuthParam(TelegramAuthParamType.PHONE_NUMBER, text)
 			LoginDialogType.ENTER_CODE -> telegramAuthorizationRequestHandler?.applyAuthParam(TelegramAuthParamType.CODE, text)
 			LoginDialogType.ENTER_PASSWORD -> telegramAuthorizationRequestHandler?.applyAuthParam(TelegramAuthParamType.PASSWORD, text)
+			else -> {}
 		}
 	}
 

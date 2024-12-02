@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import net.osmand.plus.OsmandApplication;
+import net.osmand.plus.backup.PrepareBackupResult.RemoteFilesType;
 import net.osmand.plus.backup.SyncBackupTask.OnBackupSyncListener;
 import net.osmand.plus.settings.backend.backup.SettingsHelper;
 import net.osmand.plus.settings.backend.backup.items.SettingsItem;
@@ -141,6 +142,14 @@ public class NetworkSettingsHelper extends SettingsHelper {
 		return !Algorithms.isEmpty(syncBackupTasks);
 	}
 
+	public boolean isSyncing(@NonNull String key) {
+		SyncBackupTask syncTask = getSyncTask(key);
+		if (syncTask == null) {
+			syncTask = getSyncTask(SYNC_ITEMS_KEY);
+		}
+		return syncTask != null;
+	}
+
 	void finishImport(@Nullable ImportListener listener, boolean success, @NonNull List<SettingsItem> items, boolean needRestart) {
 		String error = collectFormattedWarnings(items);
 		if (!Algorithms.isEmpty(error)) {
@@ -189,10 +198,22 @@ public class NetworkSettingsHelper extends SettingsHelper {
 
 	public void importSettings(@NonNull String key,
 	                           @NonNull List<SettingsItem> items,
+	                           @NonNull RemoteFilesType filesType,
 	                           boolean forceReadData,
 	                           @Nullable ImportListener listener) throws IllegalStateException {
+		importSettings(key, items, filesType, forceReadData, true, false, listener);
+	}
+
+	public void importSettings(@NonNull String key,
+	                           @NonNull List<SettingsItem> items,
+	                           @NonNull RemoteFilesType filesType,
+	                           boolean forceReadData,
+	                           boolean shouldReplace,
+	                           boolean restoreDeleted,
+	                           @Nullable ImportListener listener) throws IllegalStateException {
 		if (!importAsyncTasks.containsKey(key)) {
-			ImportBackupTask importTask = new ImportBackupTask(key, this, items, listener, forceReadData);
+			ImportBackupTask importTask = new ImportBackupTask(key, this, items, filesType,
+					listener, forceReadData, shouldReplace, restoreDeleted);
 			importAsyncTasks.put(key, importTask);
 			importTask.executeOnExecutor(getBackupHelper().getExecutor());
 		} else {
@@ -227,28 +248,42 @@ public class NetworkSettingsHelper extends SettingsHelper {
 	public void syncSettingsItems(@NonNull String key,
 	                              @Nullable LocalFile localFile,
 	                              @Nullable RemoteFile remoteFile,
+	                              @NonNull RemoteFilesType filesType,
 	                              @NonNull SyncOperationType operation) {
+		syncSettingsItems(key, localFile, remoteFile, filesType, operation, true, false);
+	}
+
+	public void syncSettingsItems(@NonNull String key,
+	                              @Nullable LocalFile localFile,
+	                              @Nullable RemoteFile remoteFile,
+	                              @NonNull RemoteFilesType type,
+	                              @NonNull SyncOperationType operation,
+	                              boolean shouldReplace, boolean restoreDeleted) {
 		if (!syncBackupTasks.containsKey(key)) {
 			SyncBackupTask syncTask = new SyncBackupTask(getApp(), key, operation, getOnBackupSyncListener());
 			registerSyncBackupTask(key, syncTask);
 			switch (operation) {
-				case SYNC_OPERATION_DELETE:
-					if (remoteFile != null) {
-						syncTask.deleteItem(remoteFile.item);
+				case SYNC_OPERATION_DELETE -> {
+					if (remoteFile != null && !remoteFile.isDeleted()) {
+						if (remoteFile.item != null) {
+							syncTask.deleteItem(remoteFile.item);
+						}
 					} else if (localFile != null) {
-						syncTask.deleteLocalItem(localFile.item);
+						if (localFile.item != null) {
+							syncTask.deleteLocalItem(localFile.item);
+						}
 					}
-					break;
-				case SYNC_OPERATION_UPLOAD:
-					if (localFile != null) {
+				}
+				case SYNC_OPERATION_UPLOAD -> {
+					if (localFile != null && localFile.item != null) {
 						syncTask.uploadLocalItem(localFile.item);
 					}
-					break;
-				case SYNC_OPERATION_DOWNLOAD:
-					if (remoteFile != null) {
-						syncTask.downloadRemoteVersion(remoteFile.item);
+				}
+				case SYNC_OPERATION_DOWNLOAD -> {
+					if (remoteFile != null && remoteFile.item != null) {
+						syncTask.downloadItem(remoteFile.item, type, shouldReplace, restoreDeleted);
 					}
-					break;
+				}
 			}
 		} else {
 			throw new IllegalStateException("Already syncing " + key);

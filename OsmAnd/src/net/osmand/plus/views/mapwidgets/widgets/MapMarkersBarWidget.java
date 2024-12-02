@@ -60,10 +60,9 @@ public class MapMarkersBarWidget extends MapWidget implements CustomLatLonListen
 
 	public MapMarkersBarWidget(@NonNull MapActivity mapActivity, String customId) {
 		super(mapActivity, MARKERS_TOP_BAR);
-
+		this.customId = customId;
 		markersHelper = app.getMapMarkersHelper();
 		portraitMode = AndroidUiHelper.isOrientationPortrait(mapActivity);
-		this.customId = customId;
 
 		markerContainer2nd = view.findViewById(R.id.map_markers_top_bar_2nd);
 		arrowImg = view.findViewById(R.id.map_marker_arrow);
@@ -112,9 +111,9 @@ public class MapMarkersBarWidget extends MapWidget implements CustomLatLonListen
 	}
 
 	private void setupOkButtons() {
-		okButton.setImageDrawable(iconsCache.getIcon(R.drawable.ic_action_marker_passed, R.color.color_white));
+		okButton.setImageDrawable(iconsCache.getIcon(R.drawable.ic_action_marker_passed, R.color.card_and_list_background_light));
 		okButton.setOnClickListener(v -> removeMarker(0));
-		okButton2nd.setImageDrawable(iconsCache.getIcon(R.drawable.ic_action_marker_passed, R.color.color_white));
+		okButton2nd.setImageDrawable(iconsCache.getIcon(R.drawable.ic_action_marker_passed, R.color.card_and_list_background_light));
 		okButton2nd.setOnClickListener(v -> removeMarker(1));
 	}
 
@@ -235,30 +234,9 @@ public class MapMarkersBarWidget extends MapWidget implements CustomLatLonListen
 
 	@Override
 	public void attachView(@NonNull ViewGroup container, @NonNull WidgetsPanel panel,
-	                       int order, @NonNull List<MapWidget> followingWidgets) {
-		super.attachView(container, panel, order, followingWidgets);
-
-		boolean showBottomShadow = true;
-		WidgetsVisibilityHelper visibilityHelper = mapActivity.getWidgetsVisibilityHelper();
-		boolean mapCenterVisible = visibilityHelper.shouldShowTopMapCenterCoordinatesWidget();
-		boolean currentCoordinatesVisible = visibilityHelper.shouldShowTopCurrentLocationCoordinatesWidget();
-		WidgetsPanel widgetsPanel = widgetType.getPanel(customId != null ? customId : widgetType.id, settings);
-		if (widgetsPanel == WidgetsPanel.TOP) {
-			for (MapWidget widget : followingWidgets) {
-				if (widget instanceof MapMarkersBarWidget
-						|| (widget instanceof CoordinatesBaseWidget && (mapCenterVisible || currentCoordinatesVisible))) {
-					showBottomShadow = false;
-					break;
-				}
-			}
-		} else {
-			showBottomShadow = false;
-		}
-		showHideBottomShadow(showBottomShadow);
-	}
-
-	private void showHideBottomShadow(boolean show) {
+	                       @NonNull List<MapWidget> followingWidgets) {
+		super.attachView(container, panel, followingWidgets);
 		View bottomShadow = view.findViewById(R.id.bottom_shadow);
-		AndroidUiHelper.updateVisibility(bottomShadow, show);
+		AndroidUiHelper.updateVisibility(bottomShadow, followingWidgets.isEmpty());
 	}
 }

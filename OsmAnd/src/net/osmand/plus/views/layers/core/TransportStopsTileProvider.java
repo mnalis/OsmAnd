@@ -13,7 +13,7 @@ import net.osmand.core.jni.MapTiledCollectionProvider;
 import net.osmand.core.jni.PointI;
 import net.osmand.core.jni.QListMapTiledCollectionPoint;
 import net.osmand.core.jni.QListPointI;
-import net.osmand.core.jni.SWIGTYPE_p_sk_spT_SkImage_const_t;
+import net.osmand.core.jni.SingleSkImage;
 import net.osmand.core.jni.SwigUtilities;
 import net.osmand.core.jni.TextRasterizer;
 import net.osmand.core.jni.TileId;
@@ -32,6 +32,7 @@ import net.osmand.plus.render.RenderingIcons;
 import net.osmand.plus.transport.TransportStopType;
 import net.osmand.plus.utils.NativeUtilities;
 import net.osmand.plus.views.PointImageDrawable;
+import net.osmand.plus.views.PointImageUtils;
 import net.osmand.plus.views.layers.base.OsmandMapLayer;
 import net.osmand.plus.views.layers.base.OsmandMapLayer.TileBoxRequest;
 import net.osmand.util.Algorithms;
@@ -176,7 +177,7 @@ public class TransportStopsTileProvider extends interface_MapTiledCollectionProv
 	}
 
 	@Override
-	public SWIGTYPE_p_sk_spT_SkImage_const_t getImageBitmap(int index, boolean isFullSize) {
+	public SingleSkImage getImageBitmap(int index, boolean isFullSize) {
 		return SwigUtilities.nullSkImage();
 	}
 
@@ -238,18 +239,18 @@ public class TransportStopsTileProvider extends interface_MapTiledCollectionProv
 		}
 
 		@Override
-		public SWIGTYPE_p_sk_spT_SkImage_const_t getImageBitmap(boolean isFullSize) {
+		public SingleSkImage getImageBitmap(boolean isFullSize) {
 			Bitmap bitmap;
 			if (isFullSize) {
 				PointImageDrawable pointImageDrawable = null;
 				if (transportRouteType.isEmpty()) {
-					pointImageDrawable = PointImageDrawable.getOrCreate(ctx,
+					pointImageDrawable = PointImageUtils.getOrCreate(ctx,
 							ContextCompat.getColor(ctx, R.color.transport_stop_icon_background),
 							true,false, R.drawable.mx_highway_bus_stop, BackgroundType.SQUARE);
 				} else {
 					TransportStopType type = TransportStopType.findType(transportRouteType);
 					if (type != null) {
-						pointImageDrawable = PointImageDrawable.getOrCreate(ctx,
+						pointImageDrawable = PointImageUtils.getOrCreate(ctx,
 								ContextCompat.getColor(ctx, R.color.transport_stop_icon_background),
 								true,false, RenderingIcons.getResId(type.getResName()), BackgroundType.SQUARE);
 					}
@@ -260,7 +261,7 @@ public class TransportStopsTileProvider extends interface_MapTiledCollectionProv
 				pointImageDrawable.setAlpha(0.9f);
 				bitmap = pointImageDrawable.getBigMergedBitmap(textScale, false);
 			} else {
-				PointImageDrawable pointImageDrawable = PointImageDrawable.getOrCreate(ctx,
+				PointImageDrawable pointImageDrawable = PointImageUtils.getOrCreate(ctx,
 						ContextCompat.getColor(ctx, R.color.transport_stop_icon_background),
 						true, false, 0, BackgroundType.SQUARE);
 				pointImageDrawable.setAlpha(0.9f);

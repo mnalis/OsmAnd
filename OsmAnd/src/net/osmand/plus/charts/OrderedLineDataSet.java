@@ -2,10 +2,16 @@ package net.osmand.plus.charts;
 
 import com.github.mikephil.charting.data.Entry;
 import com.github.mikephil.charting.data.LineDataSet;
+import com.github.mikephil.charting.interfaces.datasets.IOrderedLineDataSet;
+
+import net.osmand.plus.charts.GpxMarkerView.MarkerValueFormatter;
+import net.osmand.plus.utils.OsmAndFormatter;
 
 import java.util.List;
 
-public class OrderedLineDataSet extends LineDataSet {
+import androidx.annotation.NonNull;
+
+public class OrderedLineDataSet extends LineDataSet implements IOrderedLineDataSet {
 
 	private final GPXDataSetType dataSetType;
 	private final GPXDataSetAxisType dataSetAxisType;
@@ -15,8 +21,9 @@ public class OrderedLineDataSet extends LineDataSet {
 	private String units;
 	private float priority;
 	private float divX = 1f;
-	private float divY = 1f;
-	private float mulY = 1f;
+
+	@NonNull
+	private MarkerValueFormatter markerValueFormatter;
 
 	public OrderedLineDataSet(List<Entry> yVals, String label, GPXDataSetType dataSetType,
 	                          GPXDataSetAxisType dataSetAxisType, boolean leftAxis) {
@@ -25,6 +32,8 @@ public class OrderedLineDataSet extends LineDataSet {
 		this.dataSetType = dataSetType;
 		this.dataSetAxisType = dataSetAxisType;
 		this.leftAxis = leftAxis;
+		this.markerValueFormatter = (app, value) ->
+				OsmAndFormatter.formatIntegerValue((int) (value + 0.5f), "", app).value + " ";
 	}
 
 	public GPXDataSetType getDataSetType() {
@@ -51,22 +60,6 @@ public class OrderedLineDataSet extends LineDataSet {
 		this.divX = divX;
 	}
 
-	public float getDivY() {
-		return divY;
-	}
-
-	public void setDivY(float divY) {
-		this.divY = divY;
-	}
-
-	public float getMulY() {
-		return mulY;
-	}
-
-	public void setMulY(float mulY) {
-		this.mulY = mulY;
-	}
-
 	public String getUnits() {
 		return units;
 	}
@@ -75,7 +68,17 @@ public class OrderedLineDataSet extends LineDataSet {
 		this.units = units;
 	}
 
+	@Override
 	public boolean isLeftAxis() {
 		return leftAxis;
+	}
+
+	@NonNull
+	public MarkerValueFormatter getMarkerValueFormatter() {
+		return markerValueFormatter;
+	}
+
+	public void setAxisValueFormatter(@NonNull MarkerValueFormatter markerValueFormatter) {
+		this.markerValueFormatter = markerValueFormatter;
 	}
 }

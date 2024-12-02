@@ -1,6 +1,10 @@
 package net.osmand.plus.helpers;
 
 import static net.osmand.plus.backup.BackupListeners.OnRegisterDeviceListener;
+import static net.osmand.plus.configmap.tracks.PreselectedTabParams.CALLING_FRAGMENT_TAG;
+import static net.osmand.plus.configmap.tracks.PreselectedTabParams.PRESELECTED_TRACKS_TAB_ID;
+import static net.osmand.plus.configmap.tracks.PreselectedTabParams.SELECT_ALL_ITEMS_ON_TAB;
+import static net.osmand.plus.helpers.MapFragmentsHelper.CLOSE_ALL_FRAGMENTS;
 import static net.osmand.plus.settings.fragments.ExportSettingsFragment.SELECTED_TYPES;
 import static net.osmand.plus.track.fragments.TrackMenuFragment.CURRENT_RECORDING;
 import static net.osmand.plus.track.fragments.TrackMenuFragment.OPEN_TAB_NAME;
@@ -15,7 +19,6 @@ import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.fragment.app.DialogFragment;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 
@@ -23,38 +26,42 @@ import net.osmand.IndexConstants;
 import net.osmand.PlatformUtil;
 import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
-import net.osmand.gpx.GPXUtilities.PointsGroup;
+import net.osmand.shared.gpx.GpxUtilities.PointsGroup;
 import net.osmand.map.TileSourceManager;
+import net.osmand.plus.AppInitializeListener;
 import net.osmand.plus.AppInitializer;
-import net.osmand.plus.AppInitializer.AppInitializeListener;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.backup.BackupHelper;
+import net.osmand.plus.backup.BackupUtils;
 import net.osmand.plus.backup.ui.AuthorizeFragment;
 import net.osmand.plus.backup.ui.BackupAuthorizationFragment;
 import net.osmand.plus.backup.ui.BackupCloudFragment;
 import net.osmand.plus.backup.ui.LoginDialogType;
 import net.osmand.plus.chooseplan.ChoosePlanFragment;
 import net.osmand.plus.chooseplan.OsmAndFeature;
-import net.osmand.plus.configmap.tracks.TracksFragment;
+import net.osmand.plus.configmap.tracks.PreselectedTabParams;
+import net.osmand.plus.configmap.tracks.TrackTabType;
+import net.osmand.plus.configmap.tracks.TracksTabsFragment;
 import net.osmand.plus.dashboard.DashboardOnMap.DashboardType;
-import net.osmand.plus.inapp.InAppPurchaseHelper;
+import net.osmand.plus.inapp.InAppPurchaseUtils;
 import net.osmand.plus.mapcontextmenu.editors.FavouriteGroupEditorFragment;
 import net.osmand.plus.mapmarkers.MapMarkersDialogFragment;
 import net.osmand.plus.mapmarkers.MapMarkersGroup;
 import net.osmand.plus.mapsource.EditMapSourceDialogFragment;
 import net.osmand.plus.myplaces.favorites.FavoriteGroup;
 import net.osmand.plus.myplaces.favorites.dialogs.EditFavoriteGroupDialogFragment;
+import net.osmand.plus.notifications.GpxNotification;
 import net.osmand.plus.plugins.PluginsFragment;
-import net.osmand.plus.plugins.openplacereviews.OPRConstants;
-import net.osmand.plus.plugins.openplacereviews.OprAuthHelper.OprAuthorizationListener;
+import net.osmand.plus.plugins.PluginsHelper;
+import net.osmand.plus.plugins.monitoring.OsmandMonitoringPlugin;
 import net.osmand.plus.plugins.osmedit.oauth.OsmOAuthHelper.OsmAuthorizationListener;
 import net.osmand.plus.routepreparationmenu.MapRouteInfoMenu;
-import net.osmand.plus.search.QuickSearchDialogFragment;
+import net.osmand.plus.search.dialogs.QuickSearchDialogFragment;
 import net.osmand.plus.settings.backend.ApplicationMode;
-import net.osmand.plus.settings.backend.ExportSettingsType;
 import net.osmand.plus.settings.backend.OsmandSettings;
+import net.osmand.plus.settings.backend.backup.exporttype.ExportType;
 import net.osmand.plus.settings.fragments.BaseSettingsFragment;
 import net.osmand.plus.settings.fragments.ExportSettingsFragment;
 import net.osmand.plus.settings.fragments.SettingsScreenType;
@@ -62,8 +69,10 @@ import net.osmand.plus.track.fragments.TrackMenuFragment;
 import net.osmand.plus.utils.AndroidNetworkUtils;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.views.OsmandMapTileView;
-import net.osmand.plus.views.mapwidgets.configure.ConfigureScreenFragment;
+import net.osmand.plus.views.mapwidgets.configure.dialogs.ConfigureScreenFragment;
 import net.osmand.util.Algorithms;
+import net.osmand.util.GeoParsedPoint;
+import net.osmand.util.GeoPointParserUtil;
 
 import org.apache.commons.logging.Log;
 
@@ -86,8 +95,8 @@ public class IntentHelper {
 	private static final String URL_PARAMETER_START = "start";
 	private static final String URL_PARAMETER_END = "end";
 	private static final String URL_PARAMETER_TOKEN = "token";
-	private static final String URL_PARAMETER_MODE = "mode";
-	private static final String URL_PARAMETER_INTERMEDIATE_POINT = "ipoints";
+	private static final String URL_PARAMETER_MODE = "profile";
+	private static final String URL_PARAMETER_INTERMEDIATE_POINTS = "via";
 
 	private final OsmandApplication app;
 	private final OsmandSettings settings;
@@ -129,8 +138,7 @@ public class IntentHelper {
 				|| parseTileSourceIntent()
 				|| parseOpenGpxIntent()
 				|| parseSendIntent()
-				|| parseOAuthIntent()
-				|| parseOprOAuthIntent();
+				|| parseOAuthIntent();
 	}
 
 	private boolean parseNavigationIntent() {
@@ -142,7 +150,7 @@ public class IntentHelper {
 				String startLatLonParam = data.getQueryParameter(URL_PARAMETER_START);
 				String endLatLonParam = data.getQueryParameter(URL_PARAMETER_END);
 				String appModeKeyParam = data.getQueryParameter(URL_PARAMETER_MODE);
-				String intermediatePointsParam = data.getQueryParameter(URL_PARAMETER_INTERMEDIATE_POINT);
+				String intermediatePointsParam = data.getQueryParameter(URL_PARAMETER_INTERMEDIATE_POINTS);
 
 				if (Algorithms.isEmpty(endLatLonParam)) {
 					LOG.error("Malformed OsmAnd navigation URL: destination location is missing");
@@ -179,9 +187,35 @@ public class IntentHelper {
 				} else {
 					buildRoute(startLatLon, endLatLon, appMode, points);
 				}
-
 				clearIntent(intent);
 				return true;
+			} else {
+				List<GeoParsedPoint> points = GeoPointParserUtil.parsePoints(data.toString());
+				if (points != null && points.size() > 1) {
+					GeoParsedPoint startPoint = points.get(0);
+					GeoParsedPoint endPoint = points.get(points.size() - 1);
+
+					LatLon startLatLon = startPoint != null ? new LatLon(startPoint.getLatitude(), startPoint.getLongitude()) : null;
+					LatLon endLatLon = endPoint != null ? new LatLon(endPoint.getLatitude(), endPoint.getLongitude()) : null;
+					if (endLatLon == null) {
+						LOG.error("Malformed navigation URL: destination location is empty");
+						return true;
+					}
+					if (app.isApplicationInitializing()) {
+						app.getAppInitializer().addListener(new AppInitializeListener() {
+
+							@Override
+							public void onFinish(@NonNull AppInitializer init) {
+								init.removeListener(this);
+								buildRoute(startLatLon, endLatLon, null, null);
+							}
+						});
+					} else {
+						buildRoute(startLatLon, endLatLon, null, null);
+					}
+					clearIntent(intent);
+					return true;
+				}
 			}
 		}
 		return false;
@@ -206,11 +240,11 @@ public class IntentHelper {
 	}
 
 	private void registerDevice(@NonNull String token) {
-		AuthorizeFragment fragment = mapActivity.getFragment(AuthorizeFragment.TAG);
+		AuthorizeFragment fragment = mapActivity.getFragmentsHelper().getFragment(AuthorizeFragment.TAG);
 		if (fragment != null && fragment.getDialogType() == LoginDialogType.VERIFY_EMAIL) {
 			fragment.setToken(token);
 		} else if (!app.getBackupHelper().isRegistered() && !Algorithms.isEmpty(settings.BACKUP_USER_EMAIL.get())) {
-			if (BackupHelper.isTokenValid(token)) {
+			if (BackupUtils.isTokenValid(token)) {
 				BackupHelper backupHelper = app.getBackupHelper();
 				backupHelper.getBackupListeners().addRegisterDeviceListener(registerDeviceListener);
 				backupHelper.registerDevice(token);
@@ -264,7 +298,7 @@ public class IntentHelper {
 	@Nullable
 	private List<LatLon> parseIntermediatePoints(@Nullable String parameter) {
 		if (!Algorithms.isEmpty(parameter)) {
-			String[] params = parameter.split(",");
+			String[] params = parameter.split("[,;]");
 			List<LatLon> points = new ArrayList<>();
 
 			if (params.length >= 2 && params.length % 2 == 0) {
@@ -435,7 +469,7 @@ public class IntentHelper {
 			if (Intent.ACTION_VIEW.equals(action) || Intent.ACTION_MAIN.equals(action)) {
 				Uri data = intent.getData();
 				if (data != null) {
-					closeAllFragments();
+					mapActivity.getFragmentsHelper().closeAllFragments();
 					String scheme = data.getScheme();
 					if ("file".equals(scheme)) {
 						String path = data.getPath();
@@ -463,7 +497,9 @@ public class IntentHelper {
 					}
 				}
 			}
-
+			if (intent.getBooleanExtra(CLOSE_ALL_FRAGMENTS, false)) {
+				mapActivity.getFragmentsHelper().closeAllFragments();
+			}
 			if (intent.hasExtra(MapMarkersDialogFragment.OPEN_MAP_MARKERS_GROUPS)) {
 				Bundle openMapMarkersGroupsExtra = intent.getBundleExtra(MapMarkersDialogFragment.OPEN_MAP_MARKERS_GROUPS);
 				if (openMapMarkersGroupsExtra != null) {
@@ -522,15 +558,20 @@ public class IntentHelper {
 				TrackMenuFragment.showInstance(mapActivity, path, currentRecording, temporarySelected, name, null, tabName);
 				clearIntent(intent);
 			}
-			if (intent.hasExtra(TracksFragment.OPEN_TRACKS_TAB)) {
-				String tabName = intent.getStringExtra(TracksFragment.OPEN_TRACKS_TAB);
-				TracksFragment.showInstance(mapActivity.getSupportFragmentManager(), tabName);
+			Bundle extras = intent.getExtras();
+			if (extras != null && intent.hasExtra(PRESELECTED_TRACKS_TAB_ID)) {
+				String id = extras.getString(PRESELECTED_TRACKS_TAB_ID, TrackTabType.ALL.name());
+				String callingFragmentTag = extras.getString(CALLING_FRAGMENT_TAG, null);
+				boolean selectAllItems = intent.getBooleanExtra(SELECT_ALL_ITEMS_ON_TAB, false);
+
+				PreselectedTabParams params = new PreselectedTabParams(id, selectAllItems);
+				TracksTabsFragment.showInstance(mapActivity.getSupportFragmentManager(), params, callingFragmentTag);
 				clearIntent(intent);
 			}
 			if (intent.hasExtra(ExportSettingsFragment.SELECTED_TYPES)) {
 				ApplicationMode mode = settings.getApplicationMode();
 				FragmentManager manager = mapActivity.getSupportFragmentManager();
-				HashMap<ExportSettingsType, List<?>> selectedTypes = (HashMap<ExportSettingsType, List<?>>) intent.getSerializableExtra(SELECTED_TYPES);
+				HashMap<ExportType, List<?>> selectedTypes = (HashMap<ExportType, List<?>>) intent.getSerializableExtra(SELECTED_TYPES);
 				ExportSettingsFragment.showInstance(manager, mode, selectedTypes, true);
 
 				clearIntent(intent);
@@ -539,15 +580,22 @@ public class IntentHelper {
 				BackupAuthorizationFragment.showInstance(mapActivity.getSupportFragmentManager());
 				clearIntent(intent);
 			}
+			if (intent.hasExtra(GpxNotification.OSMAND_START_GPX_SERVICE_ACTION)) {
+				OsmandMonitoringPlugin plugin = PluginsHelper.getActivePlugin(OsmandMonitoringPlugin.class);
+				if (plugin != null) {
+					plugin.startGPXMonitoring(null);
+					plugin.updateWidgets();
+				}
+				clearIntent(intent);
+			}
 			if (intent.getExtras() != null) {
-				Bundle extras = intent.getExtras();
-				if (extras.containsKey(ChoosePlanFragment.OPEN_CHOOSE_PLAN)) {
+				if (extras != null && extras.containsKey(ChoosePlanFragment.OPEN_CHOOSE_PLAN)) {
 					String featureValue = extras.getString(ChoosePlanFragment.CHOOSE_PLAN_FEATURE);
 					if (!Algorithms.isEmpty(featureValue)) {
 						try {
 							OsmAndFeature feature = OsmAndFeature.valueOf(featureValue);
 							if (feature == OsmAndFeature.ANDROID_AUTO) {
-								if (!InAppPurchaseHelper.isAndroidAutoAvailable(app)) {
+								if (!InAppPurchaseUtils.isAndroidAutoAvailable(app)) {
 									ChoosePlanFragment.showInstance(mapActivity, feature);
 								}
 							} else {
@@ -560,18 +608,6 @@ public class IntentHelper {
 				}
 				clearIntent(intent);
 			}
-		}
-	}
-
-	private void closeAllFragments() {
-		FragmentManager fragmentManager = mapActivity.getSupportFragmentManager();
-		for (Fragment fragment : fragmentManager.getFragments()) {
-			if (fragment instanceof DialogFragment) {
-				((DialogFragment) fragment).dismiss();
-			}
-		}
-		for (int i = 0; i < fragmentManager.getBackStackEntryCount(); i++) {
-			fragmentManager.popBackStack();
 		}
 	}
 
@@ -624,29 +660,13 @@ public class IntentHelper {
 		if (intent != null && intent.getData() != null) {
 			Uri uri = intent.getData();
 			if (uri.toString().startsWith("osmand-oauth")) {
-				String oauthVerifier = uri.getQueryParameter("oauth_verifier");
-				if (oauthVerifier != null) {
+				String code = uri.getQueryParameter("code");
+				if (code != null) {
 					app.getOsmOAuthHelper().addListener(getOnAuthorizeListener());
-					app.getOsmOAuthHelper().authorize(oauthVerifier);
+					app.getOsmOAuthHelper().authorize(code);
 					clearIntent(intent);
 					return true;
 				}
-			}
-		}
-		return false;
-	}
-
-	private boolean parseOprOAuthIntent() {
-		Intent intent = mapActivity.getIntent();
-		if (intent != null && intent.getData() != null) {
-			Uri uri = intent.getData();
-			if (uri.toString().startsWith(OPRConstants.OPR_OAUTH_PREFIX)) {
-				String token = uri.getQueryParameter("opr-token");
-				String username = uri.getQueryParameter("opr-nickname");
-				app.getOprAuthHelper().addListener(getOprAuthorizationListener());
-				app.getOprAuthHelper().authorize(token, username);
-				clearIntent(intent);
-				return true;
 			}
 		}
 		return false;
@@ -657,16 +677,6 @@ public class IntentHelper {
 			for (Fragment fragment : mapActivity.getSupportFragmentManager().getFragments()) {
 				if (fragment instanceof OsmAuthorizationListener) {
 					((OsmAuthorizationListener) fragment).authorizationCompleted();
-				}
-			}
-		};
-	}
-
-	private OprAuthorizationListener getOprAuthorizationListener() {
-		return () -> {
-			for (Fragment fragment : mapActivity.getSupportFragmentManager().getFragments()) {
-				if (fragment instanceof OprAuthorizationListener) {
-					((OprAuthorizationListener) fragment).authorizationCompleted();
 				}
 			}
 		};
@@ -731,12 +741,12 @@ public class IntentHelper {
 		if (!Algorithms.isEmpty(intermediatePoints)) {
 			StringBuilder stringBuilder = new StringBuilder();
 			for (LatLon latLon : intermediatePoints) {
-				stringBuilder.append(",")
+				stringBuilder.append(";")
 						.append(getFormattedCoordinate(latLon.getLatitude()))
 						.append(",")
 						.append(getFormattedCoordinate(latLon.getLongitude()));
 			}
-			builder.appendQueryParameter(URL_PARAMETER_INTERMEDIATE_POINT, stringBuilder.substring(1));
+			builder.appendQueryParameter(URL_PARAMETER_INTERMEDIATE_POINTS, stringBuilder.substring(1));
 		}
 
 		if (endPoint != null) {

@@ -40,8 +40,7 @@ public abstract class MapWidget {
 	protected final RoutingHelper routingHelper;
 
 	protected final WidgetType widgetType;
-
-	private boolean nightMode;
+	protected boolean nightMode;
 
 	protected final View view;
 
@@ -80,8 +79,10 @@ public abstract class MapWidget {
 		}
 	}
 
-	public void attachView(@NonNull ViewGroup container, @NonNull WidgetsPanel widgetsPanel,
-	                       int order, @NonNull List<MapWidget> followingWidgets) {
+	public void copySettingsFromMode(@NonNull ApplicationMode sourceAppMode, @NonNull ApplicationMode appMode, @Nullable String customId) {
+	}
+
+	public void attachView(@NonNull ViewGroup container, @NonNull WidgetsPanel panel, @NonNull List<MapWidget> followingWidgets) {
 		container.addView(view);
 	}
 
@@ -107,7 +108,7 @@ public abstract class MapWidget {
 	}
 
 	public boolean isExternal() {
-		return getWidgetType() == null;
+		return getWidgetType() == WidgetType.AIDL_WIDGET;
 	}
 
 	public void updateInfo(@Nullable DrawSettings drawSettings) {
@@ -127,8 +128,8 @@ public abstract class MapWidget {
 	}
 
 	public static void updateTextColor(@NonNull TextView text, @Nullable TextView textShadow,
-	                                   @ColorInt int textColor, @ColorInt int textShadowColor,
-	                                   boolean boldText, int shadowRadius) {
+									   @ColorInt int textColor, @ColorInt int textShadowColor,
+									   boolean boldText, int shadowRadius) {
 		int typefaceStyle = boldText ? Typeface.BOLD : Typeface.NORMAL;
 
 		if (textShadow != null) {
@@ -143,14 +144,17 @@ public abstract class MapWidget {
 				AndroidUiHelper.updateVisibility(textShadow, false);
 			}
 		}
-
 		text.setTextColor(textColor);
 		text.setTypeface(Typeface.DEFAULT, typefaceStyle);
 	}
 
 	@NonNull
 	protected String getString(@StringRes int stringId, Object... args) {
-		return app.getString(stringId, args);
+		if (args.length > 0) {
+			return app.getString(stringId, args);
+		} else {
+			return app.getString(stringId);
+		}
 	}
 
 	@NonNull

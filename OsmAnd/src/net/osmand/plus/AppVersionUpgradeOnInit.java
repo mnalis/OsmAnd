@@ -1,29 +1,24 @@
 package net.osmand.plus;
 
+import static net.osmand.plus.AppInitEvents.FAVORITES_INITIALIZED;
+import static net.osmand.plus.download.local.LocalItemType.MAP_DATA;
+import static net.osmand.plus.download.local.LocalItemType.ROAD_DATA;
 import static net.osmand.plus.plugins.audionotes.AudioVideoNotesPlugin.AV_DEFAULT_ACTION_AUDIO;
 import static net.osmand.plus.plugins.audionotes.AudioVideoNotesPlugin.AV_DEFAULT_ACTION_CHOOSE;
 import static net.osmand.plus.plugins.audionotes.AudioVideoNotesPlugin.AV_DEFAULT_ACTION_TAKEPICTURE;
 import static net.osmand.plus.plugins.audionotes.AudioVideoNotesPlugin.AV_DEFAULT_ACTION_VIDEO;
 import static net.osmand.plus.plugins.audionotes.AudioVideoNotesPlugin.DEFAULT_ACTION_SETTING_ID;
+import static net.osmand.plus.plugins.srtm.TerrainMode.DEFAULT_KEY;
+import static net.osmand.plus.plugins.srtm.TerrainMode.TerrainType.HEIGHT;
+import static net.osmand.plus.settings.backend.backup.exporttype.AbstractMapExportType.OFFLINE_MAPS_EXPORT_TYPE_KEY;
+import static net.osmand.plus.settings.enums.LocalSortMode.COUNTRY_NAME_ASCENDING;
 import static net.osmand.plus.views.mapwidgets.MapWidgetRegistry.COLLAPSED_PREFIX;
 import static net.osmand.plus.views.mapwidgets.MapWidgetRegistry.HIDE_PREFIX;
 import static net.osmand.plus.views.mapwidgets.MapWidgetRegistry.SETTINGS_SEPARATOR;
-import static net.osmand.plus.views.mapwidgets.WidgetType.ARRIVAL_TIME_LEGACY;
-import static net.osmand.plus.views.mapwidgets.WidgetType.AV_NOTES_ON_REQUEST;
-import static net.osmand.plus.views.mapwidgets.WidgetType.AV_NOTES_RECORD_AUDIO;
-import static net.osmand.plus.views.mapwidgets.WidgetType.AV_NOTES_RECORD_VIDEO;
-import static net.osmand.plus.views.mapwidgets.WidgetType.AV_NOTES_TAKE_PHOTO;
-import static net.osmand.plus.views.mapwidgets.WidgetType.AV_NOTES_WIDGET_LEGACY;
-import static net.osmand.plus.views.mapwidgets.WidgetType.BEARING_WIDGET_LEGACY;
-import static net.osmand.plus.views.mapwidgets.WidgetType.INTERMEDIATE_ARRIVAL_TIME_LEGACY;
-import static net.osmand.plus.views.mapwidgets.WidgetType.INTERMEDIATE_TIME_TO_GO_LEGACY;
-import static net.osmand.plus.views.mapwidgets.WidgetType.INTERMEDIATE_TIME_WIDGET_LEGACY;
-import static net.osmand.plus.views.mapwidgets.WidgetType.MAGNETIC_BEARING;
-import static net.osmand.plus.views.mapwidgets.WidgetType.NAVIGATION_TIME_WIDGET_LEGACY;
-import static net.osmand.plus.views.mapwidgets.WidgetType.RELATIVE_BEARING;
-import static net.osmand.plus.views.mapwidgets.WidgetType.TIME_TO_GO_LEGACY;
+import static net.osmand.plus.views.mapwidgets.WidgetType.*;
 import static net.osmand.plus.views.mapwidgets.WidgetsPanel.PAGE_SEPARATOR;
 import static net.osmand.plus.views.mapwidgets.WidgetsPanel.WIDGET_SEPARATOR;
+import static net.osmand.plus.views.mapwidgets.configure.buttons.QuickActionButtonState.DEFAULT_BUTTON_ID;
 import static net.osmand.router.GeneralRouter.VEHICLE_HEIGHT;
 import static net.osmand.router.GeneralRouter.VEHICLE_LENGTH;
 import static net.osmand.router.GeneralRouter.VEHICLE_WEIGHT;
@@ -41,37 +36,39 @@ import com.google.gson.reflect.TypeToken;
 
 import net.osmand.data.LatLon;
 import net.osmand.data.SpecialPointType;
-import net.osmand.plus.AppInitializer.AppInitializeListener;
-import net.osmand.plus.AppInitializer.InitEvents;
 import net.osmand.plus.api.SettingsAPI;
+import net.osmand.plus.backup.BackupUtils;
+import net.osmand.plus.card.color.palette.migration.ColorsMigrationAlgorithmV1;
+import net.osmand.plus.card.color.palette.migration.ColorsMigrationAlgorithmV2;
+import net.osmand.plus.download.local.LocalItemUtils;
+import net.osmand.plus.keyevent.devices.KeyboardDeviceProfile;
+import net.osmand.plus.keyevent.devices.ParrotDeviceProfile;
+import net.osmand.plus.keyevent.devices.WunderLINQDeviceProfile;
 import net.osmand.plus.mapmarkers.MarkersDb39HelperLegacy;
 import net.osmand.plus.myplaces.favorites.FavouritesHelper;
+import net.osmand.plus.plugins.srtm.TerrainMode;
+import net.osmand.plus.profiles.LocationIcon;
+import net.osmand.plus.quickaction.MapButtonsHelper;
+import net.osmand.plus.resources.migration.MergeAssetFilesVersionAlgorithm;
 import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.settings.backend.ApplicationModeBean;
 import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.settings.backend.WidgetsAvailabilityHelper;
-import net.osmand.plus.settings.backend.preferences.BooleanPreference;
-import net.osmand.plus.settings.backend.preferences.CommonPreference;
-import net.osmand.plus.settings.backend.preferences.EnumStringPreference;
-import net.osmand.plus.settings.backend.preferences.OsmandPreference;
-import net.osmand.plus.settings.backend.preferences.StringPreference;
+import net.osmand.plus.settings.backend.backup.exporttype.ExportType;
+import net.osmand.plus.settings.backend.preferences.*;
+import net.osmand.plus.settings.enums.CompassMode;
+import net.osmand.plus.settings.enums.LocalSortMode;
 import net.osmand.plus.views.layers.RadiusRulerControlLayer.RadiusRulerMode;
 import net.osmand.plus.views.mapwidgets.WidgetGroup;
 import net.osmand.plus.views.mapwidgets.WidgetType;
 import net.osmand.plus.views.mapwidgets.WidgetsIdsMapper;
+import net.osmand.plus.views.mapwidgets.configure.buttons.QuickActionButtonState;
 import net.osmand.util.Algorithms;
 
 import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
-class AppVersionUpgradeOnInit {
+public class AppVersionUpgradeOnInit {
 
 	private static final String FIRST_TIME_APP_RUN = "FIRST_TIME_APP_RUN";
 	private static final String VERSION_INSTALLED_NUMBER = "VERSION_INSTALLED_NUMBER";
@@ -117,8 +114,33 @@ class AppVersionUpgradeOnInit {
 	public static final int VERSION_4_4_01 = 4401;
 	// 4402 - 4.4-02 (Increase accuracy of vehicle sizes limits)
 	public static final int VERSION_4_4_02 = 4402;
+	public static final int VERSION_4_6_05 = 4605;
+	// 4606 - 4.6-06 (Change external input device preference type from integer to string)
+	public static final int VERSION_4_6_06 = 4606;
+	// 4607 - 4.6-07 (Migrate custom input devices preference from global to profile dependent)
+	public static final int VERSION_4_6_07 = 4607;
+	// 4608 - 4.6-08 (Expand the list of export types by dividing the general offline maps' type into subtypes)
+	public static final int VERSION_4_6_08 = 4608;
+	public static final int VERSION_4_6_09 = 4609;
+	public static final int VERSION_4_6_10 = 4610;
+	// 4701 - 4.7-01 (Migrate from simple color ints to using of wrapper with additional information PaletteColor)
+	public static final int VERSION_4_7_01 = 4701;
+	public static final int VERSION_4_7_02 = 4702;
+	public static final int VERSION_4_7_03 = 4703;
+	public static final int VERSION_4_7_04 = 4704;
+	// 4705 - 4.7-05 (Migrate from using preferences for colors storing to using external file)
+	public static final int VERSION_4_7_05 = 4705;
+	// 4706 - 4.7-06 (Import location 3D icon models)
+	public static final int VERSION_4_7_06 = 4706;
+	// 4707 - 4.7-07 (Migrate chosen 3D model key to 2D icon base key)
+	public static final int VERSION_4_7_07 = 4707;
+	// 4801 - 4.8-01 (Migrate north is up compass mode to manually rotated)
+	public static final int VERSION_4_8_01 = 4801;
+	public static final int VERSION_4_8_02 = 4802;
+	// 4803 - 4.8-03 (Merge asset files versions)
+	public static final int VERSION_4_8_03 = 4803;
 
-	public static final int LAST_APP_VERSION = VERSION_4_4_02;
+	public static final int LAST_APP_VERSION = VERSION_4_8_03;
 
 	private static final String VERSION_INSTALLED = "VERSION_INSTALLED";
 
@@ -165,15 +187,10 @@ class AppVersionUpgradeOnInit {
 				if (prevAppVersion < VERSION_3_5 || Version.getAppVersion(app).equals("3.5.3")
 						|| Version.getAppVersion(app).equals("3.5.4")) {
 					migratePreferences();
-					app.getAppInitializer().addListener(new AppInitializeListener() {
-
-						@Override
-						public void onProgress(@NonNull AppInitializer init, @NonNull InitEvents event) {
-							if (event.equals(InitEvents.FAVORITES_INITIALIZED)) {
-								migrateHomeWorkParkingToFavorites();
-							}
-						}
-					});
+					app.getAppInitializer().addOnProgressListener(
+							FAVORITES_INITIALIZED,
+							init -> migrateHomeWorkParkingToFavorites()
+					);
 				}
 				if (prevAppVersion < VERSION_3_6) {
 					migratePreferences();
@@ -182,27 +199,18 @@ class AppVersionUpgradeOnInit {
 					migrateEnumPreferences();
 				}
 				if (prevAppVersion < VERSION_3_7_01) {
-					app.getAppInitializer().addListener(new AppInitializeListener() {
-
-						@Override
-						public void onProgress(@NonNull AppInitializer init, @NonNull InitEvents event) {
-							if (event.equals(InitEvents.FAVORITES_INITIALIZED)) {
-								app.getFavoritesHelper().fixBlackBackground();
-							}
-						}
-					});
+					app.getAppInitializer().addOnProgressListener(
+							FAVORITES_INITIALIZED,
+							init -> app.getFavoritesHelper().fixBlackBackground()
+					);
 				}
 				if (prevAppVersion < VERSION_3_8_00) {
 					migrateQuickActionStates();
 				}
 				if (prevAppVersion < VERSION_4_0_00) {
-					app.getAppInitializer().addListener(new AppInitializeListener() {
-
-						@Override
-						public void onStart(@NonNull AppInitializer init) {
-							new MarkersDb39HelperLegacy(app).migrateMarkersGroups();
-						}
-					});
+					app.getAppInitializer().addOnStartListener(
+							init -> new MarkersDb39HelperLegacy(app).migrateMarkersGroups()
+					);
 				}
 				if (prevAppVersion < VERSION_4_0_03) {
 					migrateStateDependentWidgets();
@@ -218,6 +226,55 @@ class AppVersionUpgradeOnInit {
 				}
 				if (prevAppVersion < VERSION_4_4_02) {
 					increaseVehicleSizeLimitsAccuracy();
+				}
+				if (prevAppVersion < VERSION_4_6_05) {
+					updateWidgetPages(settings);
+					migrateVerticalWidgetToCustomId(settings);
+				}
+				if (prevAppVersion < VERSION_4_6_06) {
+					updateExternalInputDevicePreferenceType();
+				}
+				if (prevAppVersion < VERSION_4_6_07) {
+					migrateCustomInputDevicesPreference();
+				}
+				if (prevAppVersion < VERSION_4_6_08) {
+					migrateFromCommonMapsExportTypeToSubtypes();
+				}
+				if (prevAppVersion < VERSION_4_6_09) {
+					migrateQuickActionButtons();
+				}
+				if (prevAppVersion < VERSION_4_7_01) {
+					ColorsMigrationAlgorithmV1.execute(app);
+				}
+				if (prevAppVersion < VERSION_4_7_02) {
+					migrateVerticalWidgetPanels(settings);
+				}
+				if (prevAppVersion < VERSION_4_7_03) {
+					migrateLocalSorting(settings);
+				}
+				if (prevAppVersion < VERSION_4_7_04) {
+					app.getAppInitializer().addOnStartListener(
+							appInitializer -> migrateProfileQuickActionButtons()
+					);
+				}
+				if (prevAppVersion < VERSION_4_7_05) {
+					app.getAppInitializer().addOnFinishListener(
+							init -> ColorsMigrationAlgorithmV2.execute(app)
+					);
+				}
+				if (prevAppVersion < VERSION_4_7_07) {
+					migrate3DModelKey(settings);
+				}
+				if (prevAppVersion < VERSION_4_8_01) {
+					migrateFixedNorthToManualRotatedCompassMode(settings);
+				}
+				if (prevAppVersion < VERSION_4_8_02) {
+					migrateTerrainModeDefaultPreferences(settings);
+				}
+				if (prevAppVersion < VERSION_4_8_03) {
+					app.getAppInitializer().addOnFinishListener(
+							init -> MergeAssetFilesVersionAlgorithm.execute(app)
+					);
 				}
 				startPrefs.edit().putInt(VERSION_INSTALLED_NUMBER, lastVersion).commit();
 				startPrefs.edit().putString(VERSION_INSTALLED, Version.getFullVersion(app)).commit();
@@ -342,19 +399,30 @@ class AppVersionUpgradeOnInit {
 		}
 	}
 
-	public void migrateQuickActionStates() {
+	private void migrateQuickActionStates() {
 		OsmandSettings settings = app.getSettings();
-		String quickActionsJson = settings.getSettingsAPI().getString(settings.getGlobalPreferences(), "quick_action_new", "");
-		if (!Algorithms.isEmpty(quickActionsJson)) {
+		String json = settings.getSettingsAPI().getString(settings.getGlobalPreferences(), "quick_action_new", "");
+		if (!Algorithms.isEmpty(json)) {
 			Gson gson = new GsonBuilder().create();
-			Type type = new TypeToken<HashMap<String, Boolean>>() {
-			}.getType();
-			HashMap<String, Boolean> quickActions = gson.fromJson(quickActionsJson, type);
+			Type type = new TypeToken<HashMap<String, Boolean>>() {}.getType();
+			HashMap<String, Boolean> quickActions = gson.fromJson(json, type);
 			if (!Algorithms.isEmpty(quickActions)) {
 				for (ApplicationMode mode : ApplicationMode.allPossibleValues()) {
-					settings.setQuickActions(quickActions, mode);
+					setQuickActions(quickActions, mode);
 				}
 			}
+		}
+	}
+
+	private void setQuickActions(@NonNull Map<String, Boolean> quickActions, @NonNull ApplicationMode mode) {
+		OsmandSettings settings = app.getSettings();
+		CommonPreference<Boolean> preference = settings.registerBooleanPreference("quick_action_state", false).makeProfile();
+		if (!preference.isSetForMode(mode)) {
+			Boolean actionState = quickActions.get(mode.getStringKey());
+			if (actionState == null) {
+				actionState = preference.getDefaultValue();
+			}
+			preference.setModeValue(mode, actionState);
 		}
 	}
 
@@ -414,7 +482,6 @@ class AppVersionUpgradeOnInit {
 				settings.SAVE_TRACK_MIN_DISTANCE,
 				settings.SAVE_TRACK_INTERVAL,
 				settings.TRACK_STORAGE_DIRECTORY,
-				settings.SAVE_HEADING_TO_GPX,
 				settings.DISABLE_RECORDING_ONCE_APP_KILLED,
 				settings.SAVE_TRACK_TO_GPX,
 				settings.SAVE_GLOBAL_TRACK_REMEMBER,
@@ -640,6 +707,247 @@ class AppVersionUpgradeOnInit {
 					value -= 0.0001f;
 					valueStr = String.valueOf(value);
 					preference.setModeValue(appMode, valueStr);
+				}
+			}
+		}
+	}
+
+	private void updateWidgetPages(@NonNull OsmandSettings settings) {
+		for (ApplicationMode mode : ApplicationMode.allPossibleValues()) {
+			updateWidgetPage(mode, settings.TOP_WIDGET_PANEL_ORDER, settings.WIDGET_TOP_PANEL_ORDER);
+			updateWidgetPage(mode, settings.BOTTOM_WIDGET_PANEL_ORDER, settings.WIDGET_BOTTOM_PANEL_ORDER);
+		}
+	}
+
+	private void updateWidgetPage(@NonNull ApplicationMode mode, @NonNull ListStringPreference oldPreference, @NonNull ListStringPreference newPreference) {
+		if (oldPreference.isSetForMode(mode)) {
+			String oldString = oldPreference.getModeValue(mode);
+			String newString = oldString.replace(WIDGET_SEPARATOR, oldPreference.getDelimiter());
+			newPreference.setModeValue(mode, newString);
+		}
+		oldPreference.clearAll();
+	}
+
+	private void migrateVerticalWidgetToCustomId(@NonNull OsmandSettings settings) {
+		for (ApplicationMode mode : ApplicationMode.allPossibleValues()) {
+			updateExistingWidgetIds(settings, mode, settings.WIDGET_TOP_PANEL_ORDER, settings.RIGHT_WIDGET_PANEL_ORDER);
+			updateExistingWidgetIds(settings, mode, settings.WIDGET_TOP_PANEL_ORDER, settings.LEFT_WIDGET_PANEL_ORDER);
+			updateExistingWidgetIds(settings, mode, settings.WIDGET_BOTTOM_PANEL_ORDER, settings.RIGHT_WIDGET_PANEL_ORDER);
+			updateExistingWidgetIds(settings, mode, settings.WIDGET_BOTTOM_PANEL_ORDER, settings.LEFT_WIDGET_PANEL_ORDER);
+		}
+	}
+
+	public static void updateExistingWidgetIds(@NonNull OsmandSettings settings,
+	                                           @NonNull ApplicationMode appMode,
+	                                           @NonNull ListStringPreference verticalPanelPreference,
+	                                           @NonNull ListStringPreference sidePanelPreference) {
+		List<String> allSideWidgets = new ArrayList<>();
+		List<String> sideWidgets = sidePanelPreference.getStringsListForProfile(appMode);
+		List<String> verticalWidgets = verticalPanelPreference.getStringsListForProfile(appMode);
+
+		if (verticalWidgets != null && sideWidgets != null && verticalPanelPreference.isSetForMode(appMode)) {
+			for (String widgetPage : sideWidgets) {
+				allSideWidgets.addAll(Arrays.asList(widgetPage.split(",")));
+			}
+			for (int i = 0; i < verticalWidgets.size(); i++) {
+				String widgetId = verticalWidgets.get(i);
+				if (WidgetType.isOriginalWidget(widgetId) && allSideWidgets.contains(widgetId)) {
+					String widgetsVisibilityString = settings.MAP_INFO_CONTROLS.getModeValue(appMode);
+					List<String> widgetsVisibility = new ArrayList<>(Arrays.asList(widgetsVisibilityString.split(SETTINGS_SEPARATOR)));
+					widgetsVisibility.remove(widgetId);
+					widgetsVisibility.remove(COLLAPSED_PREFIX + widgetId);
+					widgetsVisibility.remove(HIDE_PREFIX + widgetId);
+
+					widgetId = WidgetType.getDuplicateWidgetId(widgetId);
+
+					verticalWidgets.set(i, widgetId);
+					verticalPanelPreference.setModeValues(appMode, verticalWidgets);
+					settings.CUSTOM_WIDGETS_KEYS.addModeValue(appMode, widgetId);
+
+					widgetsVisibility.add(widgetId);
+					StringBuilder newVisibilityString = new StringBuilder();
+					for (String visibility : widgetsVisibility) {
+						newVisibilityString.append(visibility).append(SETTINGS_SEPARATOR);
+					}
+					settings.MAP_INFO_CONTROLS.setModeValue(appMode, newVisibilityString.toString());
+				}
+			}
+		}
+	}
+
+	private void migrateVerticalWidgetPanels(@NonNull OsmandSettings settings) {
+		for (ApplicationMode mode : ApplicationMode.allPossibleValues()) {
+			migrateVerticalWidgetPanel(mode, settings.WIDGET_TOP_PANEL_ORDER, settings.TOP_WIDGET_PANEL_ORDER);
+			migrateVerticalWidgetPanel(mode, settings.WIDGET_BOTTOM_PANEL_ORDER, settings.BOTTOM_WIDGET_PANEL_ORDER);
+		}
+	}
+
+	private void migrateVerticalWidgetPanel(@NonNull ApplicationMode mode,
+	                                        @NonNull ListStringPreference oldPreference,
+	                                        @NonNull ListStringPreference newPreference) {
+		if (oldPreference.isSetForMode(mode)) {
+			String value = oldPreference.getModeValue(mode);
+			newPreference.setModeValue(mode, value);
+		}
+	}
+
+	private void updateExternalInputDevicePreferenceType() {
+		Map<Integer, String> updatedIds = new HashMap<>();
+		updatedIds.put(1, KeyboardDeviceProfile.ID);
+		updatedIds.put(2, ParrotDeviceProfile.ID);
+		updatedIds.put(3, WunderLINQDeviceProfile.ID);
+
+		OsmandSettings settings = app.getSettings();
+		OsmandPreference<Integer> oldPreference = new IntPreference(settings, "external_input_device", 1).makeProfile();
+		for (ApplicationMode appMode : ApplicationMode.allPossibleValues()) {
+			Integer oldId = oldPreference.getModeValue(appMode);
+			String newId = oldId != null ? updatedIds.get(oldId) : null;
+			if (newId != null) {
+				settings.EXTERNAL_INPUT_DEVICE.setModeValue(appMode, newId);
+			} else {
+				settings.EXTERNAL_INPUT_DEVICE.resetModeToDefault(appMode);
+			}
+			settings.EXTERNAL_INPUT_DEVICE_ENABLED.setModeValue(appMode, newId != null);
+		}
+	}
+
+	private void migrateCustomInputDevicesPreference() {
+		OsmandSettings settings = app.getSettings();
+		CommonPreference<String> oldPreference = new StringPreference(settings, "custom_external_input_devices", "").makeGlobal();
+		String oldPreferenceValue = oldPreference.get();
+		for (ApplicationMode appMode : ApplicationMode.allPossibleValues()) {
+			settings.CUSTOM_EXTERNAL_INPUT_DEVICES.setModeValue(appMode, oldPreferenceValue);
+		}
+	}
+
+	private void migrateFromCommonMapsExportTypeToSubtypes() {
+		OsmandSettings settings = app.getSettings();
+
+		String prefId = "save_version_history_" + OFFLINE_MAPS_EXPORT_TYPE_KEY;
+		Boolean oldVersionHistoryPrefValue =
+				settings.registerBooleanPreference(prefId, true).makeGlobal().get();
+
+		prefId = "backup_type_" + OFFLINE_MAPS_EXPORT_TYPE_KEY;
+		Boolean oldBackupTypePrefValue =
+				settings.registerBooleanPreference(prefId, true).makeGlobal().get();
+
+		for (ExportType newExportType : ExportType.mapValues()) {
+			BackupUtils.getVersionHistoryTypePref(app, newExportType).set(oldVersionHistoryPrefValue);
+			BackupUtils.getBackupTypePref(app, newExportType).set(oldBackupTypePrefValue);
+		}
+	}
+
+	private void migrateQuickActionButtons() {
+		OsmandSettings settings = app.getSettings();
+		SharedPreferences globalPreferences = (SharedPreferences) settings.getGlobalPreferences();
+
+		CommonPreference<Boolean> oldStatePref = new BooleanPreference(settings, "quick_action_state", false).makeProfile();
+		CommonPreference<Boolean> newStatePref = new BooleanPreference(settings, DEFAULT_BUTTON_ID + "_state", false).makeProfile();
+
+		for (ApplicationMode appMode : ApplicationMode.allPossibleValues()) {
+			newStatePref.setModeValue(appMode, oldStatePref.getModeValue(appMode));
+			settings.QUICK_ACTION_BUTTONS.addModeValue(appMode, DEFAULT_BUTTON_ID);
+		}
+
+		String value = globalPreferences.getString("quick_action_list", "");
+		if (!Algorithms.isEmpty(value)) {
+			CommonPreference<String> actionsPref = new StringPreference(settings, DEFAULT_BUTTON_ID + "_list", "").makeProfile();
+			for (ApplicationMode appMode : ApplicationMode.allPossibleValues()) {
+				actionsPref.setModeValue(appMode, value);
+			}
+		}
+	}
+
+	private void migrateProfileQuickActionButtons() {
+		OsmandSettings settings = app.getSettings();
+		MapButtonsHelper buttonsHelper = app.getMapButtonsHelper();
+		Map<String, QuickActionButtonState> globalButtons = new LinkedHashMap<>();
+
+		for (ApplicationMode appMode : ApplicationMode.allPossibleValues()) {
+			SharedPreferences preferences = (SharedPreferences) settings.getProfilePreferences(appMode);
+
+			String ids = preferences.getString("quick_action_buttons", DEFAULT_BUTTON_ID + ";");
+			List<String> actionsKeys = ListStringPreference.getStringsList(ids, ";");
+			if (!Algorithms.isEmpty(actionsKeys)) {
+				Set<String> uniqueKeys = new LinkedHashSet<>(actionsKeys);
+				for (String key : uniqueKeys) {
+					if (!Algorithms.isEmpty(key)) {
+						String name = preferences.getString(key + "_name", "");
+						if (!globalButtons.containsKey(name)) {
+							QuickActionButtonState oldState = new QuickActionButtonState(app, key);
+							QuickActionButtonState newState = buttonsHelper.createNewButtonState();
+
+							newState.getNamePref().set(name);
+							newState.getQuickActionsPref().set(preferences.getString(key + "_list", null));
+							copyPreferenceForAllModes(oldState.getVisibilityPref(), newState.getVisibilityPref());
+
+							globalButtons.put(name, newState);
+						}
+					}
+				}
+			}
+		}
+		if (!globalButtons.isEmpty()) {
+			buttonsHelper.setQuickActionStates(globalButtons.values());
+		}
+	}
+
+	private <T> void copyPreferenceForAllModes(@NonNull CommonPreference<T> oldPref, @NonNull CommonPreference<T> newPref) {
+		for (ApplicationMode mode : ApplicationMode.allPossibleValues()) {
+			newPref.setModeValue(mode, oldPref.getModeValue(mode));
+		}
+	}
+
+	private void migrateLocalSorting(@NonNull OsmandSettings settings) {
+		CommonPreference<LocalSortMode> oldPref = settings.registerEnumStringPreference("local_maps_sort_mode", COUNTRY_NAME_ASCENDING, LocalSortMode.values(), LocalSortMode.class).makeGlobal().makeShared();
+		if (oldPref.isSet()) {
+			LocalSortMode sortMode = oldPref.get();
+			LocalItemUtils.getSortModePref(app, MAP_DATA).set(sortMode);
+			LocalItemUtils.getSortModePref(app, ROAD_DATA).set(sortMode);
+		}
+	}
+
+	private void migrate3DModelKey(@NonNull OsmandSettings settings) {
+		for (ApplicationMode mode : ApplicationMode.allPossibleValues()) {
+			String locationIcon = settings.LOCATION_ICON.getModeValue(mode);
+			String migrateLocationIconKey = LocationIcon.getIconForDefaultModel(locationIcon);
+			if (migrateLocationIconKey != null) {
+				settings.LOCATION_ICON.setModeValue(mode, migrateLocationIconKey);
+			}
+
+			String navigationIcon = settings.NAVIGATION_ICON.getModeValue(mode);
+			String migrateNavigationIconKey = LocationIcon.getIconForDefaultModel(navigationIcon);
+			if (migrateNavigationIconKey != null) {
+				settings.NAVIGATION_ICON.setModeValue(mode, migrateNavigationIconKey);
+			}
+		}
+	}
+
+	private void migrateFixedNorthToManualRotatedCompassMode(@NonNull OsmandSettings settings) {
+		for (ApplicationMode mode : ApplicationMode.allPossibleValues()) {
+			if (settings.getCompassMode(mode) == CompassMode.NORTH_IS_UP) {
+				settings.setCompassMode(CompassMode.MANUALLY_ROTATED, mode);
+			}
+		}
+	}
+
+	private void migrateTerrainModeDefaultPreferences(@NonNull OsmandSettings settings) {
+		OsmandPreference<Integer> oldDefaultMinZoomPref = new IntPreference(settings, DEFAULT_KEY + "_min_zoom", 0);
+		OsmandPreference<Integer> oldDefaultMaxZoomPref = new IntPreference(settings, DEFAULT_KEY + "_max_zoom", 0);
+		OsmandPreference<Integer> oldDefaultTransparencyPref = new IntPreference(settings, DEFAULT_KEY + "_transparency", 0);
+
+		for (ApplicationMode mode : ApplicationMode.allPossibleValues()) {
+			Integer oldMinZoom = oldDefaultMinZoomPref.getModeValue(mode);
+			Integer oldMaxZoom = oldDefaultMaxZoomPref.getModeValue(mode);
+			Integer oldTransparencyZoom = oldDefaultTransparencyPref.getModeValue(mode);
+			for (TerrainMode terrainMode : TerrainMode.values(app)) {
+				if (terrainMode.isDefaultMode() && terrainMode.getType() != HEIGHT) {
+					if (oldDefaultMinZoomPref.isSetForMode(mode) && oldDefaultMaxZoomPref.isSetForMode(mode)) {
+						terrainMode.setZoomValues(oldMinZoom, oldMaxZoom);
+					}
+					if (oldDefaultTransparencyPref.isSetForMode(mode)) {
+						terrainMode.setTransparency(oldTransparencyZoom);
+					}
 				}
 			}
 		}

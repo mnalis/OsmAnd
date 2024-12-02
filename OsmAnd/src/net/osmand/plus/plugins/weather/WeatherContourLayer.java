@@ -1,7 +1,7 @@
 package net.osmand.plus.plugins.weather;
 
 import static net.osmand.core.android.MapRendererContext.WEATHER_CONTOURS_SYMBOL_SECTION;
-import static net.osmand.plus.plugins.weather.WeatherBand.WEATHER_BAND_UNDEFINED;
+import static net.osmand.plus.plugins.weather.WeatherBand.WEATHER_BAND_NOTHING;
 
 import android.content.Context;
 import android.graphics.Canvas;
@@ -62,7 +62,7 @@ public class WeatherContourLayer extends BaseMapLayer {
 	}
 
 	public void setDateTime(long dateTime) {
-		this.dateTime = WeatherHelper.roundForecastTimeToHour(dateTime);
+		this.dateTime = WeatherUtils.roundForecastTimeToHour(dateTime);
 	}
 
 	@Override
@@ -152,7 +152,7 @@ public class WeatherContourLayer extends BaseMapLayer {
 		WeatherContour contour = plugin.hasCustomForecast() ?
 				plugin.getSelectedForecastContoursType() : plugin.getSelectedContoursType();
 
-		short band = contour != null ? contour.getBandIndex() : WEATHER_BAND_UNDEFINED;
+		short band = contour != null ? contour.getBandIndex() : WEATHER_BAND_NOTHING;
 		if (shouldUpdateLayer(band) || mapActivityInvalidated || mapRendererChanged) {
 			if (shouldDrawLayer(band)) {
 				recreateLayerProvider(mapRenderer, resourcesManager, band);
@@ -165,7 +165,7 @@ public class WeatherContourLayer extends BaseMapLayer {
 	}
 
 	private boolean shouldDrawLayer(@WeatherBandType short band) {
-		return band != WEATHER_BAND_UNDEFINED && (plugin.hasCustomForecast() ||
+		return band != WEATHER_BAND_NOTHING && (plugin.hasCustomForecast() ||
 				plugin.isWeatherEnabled() && plugin.isContoursEnabled());
 	}
 

@@ -2,6 +2,7 @@ package net.osmand.plus.plugins.osmedit.quickactions;
 
 import static net.osmand.osm.edit.Entity.POI_TYPE_TAG;
 import static net.osmand.plus.plugins.osmedit.fragments.AdvancedEditPoiFragment.addPoiToStringSet;
+import static net.osmand.plus.quickaction.QuickActionIds.ADD_POI_ACTION_ID;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
@@ -49,7 +50,7 @@ import net.osmand.plus.plugins.osmedit.dialogs.EditPoiDialogFragment;
 import net.osmand.plus.plugins.osmedit.dialogs.PoiSubTypeDialogFragment;
 import net.osmand.plus.plugins.osmedit.helpers.OpenstreetmapLocalUtil;
 import net.osmand.plus.plugins.osmedit.helpers.OpenstreetmapUtil;
-import net.osmand.plus.poi.PoiUIFilter;
+import net.osmand.plus.poi.PoiFilterUtils;
 import net.osmand.plus.quickaction.QuickAction;
 import net.osmand.plus.quickaction.QuickActionType;
 import net.osmand.plus.render.RenderingIcons;
@@ -72,10 +73,10 @@ import studio.carbonylgroup.textfieldboxes.ExtendedEditText;
 
 public class AddPOIAction extends QuickAction {
 
-	public static final QuickActionType TYPE = new QuickActionType(13,
+	public static final QuickActionType TYPE = new QuickActionType(ADD_POI_ACTION_ID,
 			"osmpoi.add", AddPOIAction.class).
-			nameRes(R.string.quick_action_add_poi).iconRes(R.drawable.ic_action_plus_dark).
-			category(QuickActionType.CREATE_CATEGORY);
+			nameRes(R.string.poi).iconRes(R.drawable.ic_action_plus_dark).
+			category(QuickActionType.MY_PLACES).nameActionRes(R.string.shared_string_add);
 	public static final String KEY_TAG = "key_tag";
 	public static final String KEY_DIALOG = "dialog";
 
@@ -110,12 +111,12 @@ public class AddPOIAction extends QuickAction {
 	@Override
 	public int getIconRes(Context context) {
 		PoiType poiType = getPoiType(context);
-		String iconName = PoiUIFilter.getPoiTypeIconName(poiType);
+		String iconName = PoiFilterUtils.getPoiTypeIconName(poiType);
 		if (!Algorithms.isEmpty(iconName)) {
 			return RenderingIcons.getBigIconResourceId(iconName);
 		}
 		PoiCategory poiCategory = getCategory(context);
-		String categoryIconName = PoiUIFilter.getPoiTypeIconName(poiCategory);
+		String categoryIconName = PoiFilterUtils.getPoiTypeIconName(poiCategory);
 		return Algorithms.isEmpty(categoryIconName)
 				? getIconRes()
 				: RenderingIcons.getBigIconResourceId(categoryIconName);

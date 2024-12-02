@@ -1,15 +1,13 @@
 package net.osmand.plus.myplaces.tracks;
 
-import static net.osmand.IndexConstants.GPX_INDEX_DIR;
 import static net.osmand.plus.importfiles.ImportHelper.IMPORT_FILE_REQUEST;
-import static net.osmand.plus.importfiles.ImportHelper.OnSuccessfulGpxImport.OPEN_GPX_CONTEXT_MENU;
+import static net.osmand.plus.importfiles.OnSuccessfulGpxImport.OPEN_GPX_CONTEXT_MENU;
 import static net.osmand.plus.settings.fragments.ExportSettingsFragment.SELECTED_TYPES;
 
 import android.content.Intent;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.os.AsyncTask.Status;
 import android.os.Bundle;
 import android.view.View;
 
@@ -17,26 +15,29 @@ import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 
 import net.osmand.CallbackWithObject;
-import net.osmand.gpx.GPXFile;
+import net.osmand.plus.shared.SharedUtil;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
-import net.osmand.plus.configmap.tracks.TrackFolderLoaderTask;
-import net.osmand.plus.configmap.tracks.TrackFolderLoaderTask.LoadTracksListener;
-import net.osmand.plus.configmap.tracks.TrackItem;
-import net.osmand.plus.configmap.tracks.TracksAppearanceFragment;
+import net.osmand.plus.configmap.tracks.SortByBottomSheet;
+import net.osmand.plus.configmap.tracks.appearance.ChangeAppearanceController;
 import net.osmand.plus.helpers.IntentHelper;
+import net.osmand.plus.importfiles.GpxImportListener;
 import net.osmand.plus.importfiles.ImportHelper;
-import net.osmand.plus.importfiles.ImportHelper.GpxImportListener;
 import net.osmand.plus.importfiles.MultipleTracksImportListener;
+import net.osmand.plus.importfiles.ui.FileExistBottomSheet;
+import net.osmand.plus.importfiles.ui.FileExistBottomSheet.SaveExistingFileListener;
 import net.osmand.plus.myplaces.MyPlacesActivity;
+import net.osmand.plus.myplaces.favorites.dialogs.FragmentStateHolder;
 import net.osmand.plus.myplaces.tracks.dialogs.AddNewTrackFolderBottomSheet;
 import net.osmand.plus.myplaces.tracks.dialogs.BaseTrackFolderFragment;
 import net.osmand.plus.myplaces.tracks.dialogs.MoveGpxFileBottomSheet;
 import net.osmand.plus.myplaces.tracks.dialogs.MoveGpxFileBottomSheet.OnTrackFileMoveListener;
+import net.osmand.plus.myplaces.tracks.dialogs.ScreenPositionData;
 import net.osmand.plus.myplaces.tracks.dialogs.TracksSelectionFragment;
 import net.osmand.plus.myplaces.tracks.tasks.DeleteTracksTask;
 import net.osmand.plus.myplaces.tracks.tasks.DeleteTracksTask.GpxFilesDeletionListener;
@@ -45,11 +46,11 @@ import net.osmand.plus.myplaces.tracks.tasks.OpenGpxDetailsTask;
 import net.osmand.plus.plugins.PluginsHelper;
 import net.osmand.plus.plugins.monitoring.SavingTrackHelper;
 import net.osmand.plus.plugins.osmedit.OsmEditingPlugin;
-import net.osmand.plus.settings.backend.ExportSettingsType;
-import net.osmand.plus.track.data.TrackFolder;
-import net.osmand.plus.track.data.TracksGroup;
+import net.osmand.plus.settings.backend.backup.exporttype.ExportType;
+import net.osmand.plus.track.fragments.controller.SelectRouteActivityController;
 import net.osmand.plus.track.helpers.GpxSelectionHelper;
 import net.osmand.plus.track.helpers.GpxUiHelper;
+import net.osmand.plus.track.helpers.RouteActivitySelectionHelper;
 import net.osmand.plus.track.helpers.save.SaveGpxHelper;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.FileUtils;
@@ -57,6 +58,14 @@ import net.osmand.plus.utils.UiUtilities;
 import net.osmand.plus.widgets.popup.PopUpMenu;
 import net.osmand.plus.widgets.popup.PopUpMenuDisplayData;
 import net.osmand.plus.widgets.popup.PopUpMenuItem;
+import net.osmand.shared.gpx.GpxFile;
+import net.osmand.shared.gpx.RouteActivityHelper;
+import net.osmand.shared.gpx.TrackFolderLoaderTask;
+import net.osmand.shared.gpx.TrackFolderLoaderTask.LoadTracksListener;
+import net.osmand.shared.gpx.TrackItem;
+import net.osmand.shared.gpx.data.TrackFolder;
+import net.osmand.shared.gpx.data.TracksGroup;
+import net.osmand.shared.io.KFile;
 import net.osmand.util.Algorithms;
 
 import java.io.File;
@@ -68,13 +77,18 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+
 public class TrackFoldersHelper implements OnTrackFileMoveListener {
+
+	public final static String SORT_SUB_FOLDERS_KEY = "sort_sub_folders_key";
 
 	private final OsmandApplication app;
 	private final UiUtilities uiUtilities;
 	private final ImportHelper importHelper;
 	private final GpxSelectionHelper gpxSelectionHelper;
+	private final RouteActivitySelectionHelper routeActivitySelectionHelper;
 	private final MyPlacesActivity activity;
+	private final TrackFolder rootFolder;
 
 	private TrackFolderLoaderTask asyncLoader;
 
@@ -83,12 +97,14 @@ public class TrackFoldersHelper implements OnTrackFileMoveListener {
 
 	private boolean importing;
 
-	public TrackFoldersHelper(@NonNull MyPlacesActivity activity) {
+	public TrackFoldersHelper(@NonNull MyPlacesActivity activity, @NonNull TrackFolder rootFolder) {
 		this.activity = activity;
-		this.importHelper = new ImportHelper(activity);
+		this.rootFolder = rootFolder;
 		this.app = activity.getMyApplication();
+		this.importHelper = app.getImportHelper();
 		this.uiUtilities = app.getUIUtilities();
 		this.gpxSelectionHelper = app.getSelectedGpxHelper();
+		this.routeActivitySelectionHelper = new RouteActivitySelectionHelper();
 	}
 
 	@NonNull
@@ -110,41 +126,72 @@ public class TrackFoldersHelper implements OnTrackFileMoveListener {
 	}
 
 	public void reloadTracks() {
-		File gpxDir = FileUtils.getExistingDir(app, GPX_INDEX_DIR);
-		asyncLoader = new TrackFolderLoaderTask(app, gpxDir, loadTracksListener);
-		asyncLoader.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+		reloadTracks(false);
 	}
 
-	public void showFolderOptionsMenu(@NonNull TrackFolder trackFolder, @NonNull View view, @NonNull BaseTrackFolderFragment fragment) {
+	public void reloadTracks(boolean forceLoad) {
+		if (asyncLoader != null) {
+			asyncLoader.cancel();
+		}
+		asyncLoader = new TrackFolderLoaderTask(rootFolder, loadTracksListener, forceLoad);
+		asyncLoader.execute();
+	}
+
+	public void showFolderOptionsMenu(@NonNull TrackFolder trackFolder, @NonNull View view, @NonNull BaseTrackFolderFragment fragment, boolean isRootFolder) {
 		List<PopUpMenuItem> items = new ArrayList<>();
 
 		items.add(new PopUpMenuItem.Builder(app)
 				.setTitleId(R.string.shared_string_select)
 				.setIcon(getContentIcon(R.drawable.ic_action_deselect_all))
-				.setOnClickListener(v -> showTracksSelection(trackFolder, fragment, null, null)).create());
+				.setOnClickListener(v -> {
+					ScreenPositionData screenPositionData = fragment.getFirstSuitableItemScreenPosition();
+					showTracksSelection(trackFolder, fragment, null, null, screenPositionData);
+				}).create());
+
+		if (!Algorithms.isEmpty(trackFolder.getSubFolders())) {
+			items.add(new PopUpMenuItem.Builder(app)
+					.setTitleId(R.string.sort_subfolders)
+					.setIcon(uiUtilities.getThemedIcon(R.drawable.ic_action_sort_subfolder))
+					.setOnClickListener(v -> {
+						SortByBottomSheet.showInstance(getActivity().getSupportFragmentManager(), fragment.getTracksSortMode(),
+								fragment, false, true);
+					})
+					.showTopDivider(true)
+					.create());
+		}
 
 		items.add(new PopUpMenuItem.Builder(app)
 				.setTitleId(R.string.add_new_folder)
 				.setIcon(uiUtilities.getThemedIcon(R.drawable.ic_action_folder_add_outlined))
 				.setOnClickListener(v -> {
-					File dir = trackFolder.getDirFile();
+					File dir = SharedUtil.jFile(trackFolder.getDirFile());
 					FragmentManager manager = activity.getSupportFragmentManager();
 					AddNewTrackFolderBottomSheet.showInstance(manager, dir, null, fragment, false);
 				})
-				.showTopDivider(true)
 				.create());
+
+		if (isRootFolder) {
+			items.add(new PopUpMenuItem.Builder(app)
+					.setTitleId(R.string.add_smart_folder)
+					.setIcon(uiUtilities.getThemedIcon(R.drawable.ic_action_folder_smart_outlined))
+					.setOnClickListener(v -> {
+						app.getDialogManager().showSaveSmartFolderDialog(activity, fragment.isNightMode(), null);
+					})
+					.create());
+		}
 
 		items.add(new PopUpMenuItem.Builder(app)
 				.setTitleId(R.string.shared_string_import)
 				.setIcon(uiUtilities.getThemedIcon(R.drawable.ic_action_import))
 				.setOnClickListener(v -> importTracks(fragment))
+				.showTopDivider(true)
 				.create());
 
 		PopUpMenuDisplayData displayData = new PopUpMenuDisplayData();
 		displayData.anchorView = view;
 		displayData.menuItems = items;
 		displayData.nightMode = fragment.isNightMode();
-		PopUpMenu.showSystemMenu(displayData);
+		PopUpMenu.show(displayData);
 	}
 
 	public void showItemOptionsMenu(@NonNull TrackItem trackItem, @NonNull View view, @NonNull BaseTrackFolderFragment fragment) {
@@ -156,11 +203,11 @@ public class TrackFoldersHelper implements OnTrackFileMoveListener {
 				.setOnClickListener(v -> fragment.showTrackOnMap(trackItem))
 				.create());
 
-		File file = trackItem.getFile();
+		KFile file = trackItem.getFile();
 		items.add(new PopUpMenuItem.Builder(app)
 				.setTitleId(R.string.analyze_on_map)
 				.setIcon(getContentIcon(R.drawable.ic_action_info_dark))
-				.setOnClickListener(v -> GpxSelectionHelper.getGpxFile(activity, file, true, result -> {
+				.setOnClickListener(v -> GpxSelectionHelper.getGpxFile(activity, file == null ? null : SharedUtil.jFile(file), true, result -> {
 					OpenGpxDetailsTask detailsTask = new OpenGpxDetailsTask(activity, result, null);
 					detailsTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
 					return true;
@@ -168,31 +215,28 @@ public class TrackFoldersHelper implements OnTrackFileMoveListener {
 				.create());
 
 		if (file != null) {
+			File jFile = SharedUtil.jFile(file);
 			items.add(new PopUpMenuItem.Builder(app)
 					.setTitleId(R.string.shared_string_move)
 					.setIcon(getContentIcon(R.drawable.ic_action_folder_stroke))
 					.setOnClickListener(v -> {
 						FragmentManager manager = activity.getSupportFragmentManager();
-						MoveGpxFileBottomSheet.showInstance(manager, file, fragment, false, false);
+						MoveGpxFileBottomSheet.showInstance(manager, jFile, jFile.getParentFile(), fragment, false, false);
 					})
 					.create());
 
 			items.add(new PopUpMenuItem.Builder(app)
 					.setTitleId(R.string.shared_string_rename)
 					.setIcon(getContentIcon(R.drawable.ic_action_edit_dark))
-					.setOnClickListener(v -> FileUtils.renameFile(activity, file, fragment, false))
+					.setOnClickListener(v -> FileUtils.renameFile(activity, jFile, fragment, false))
 					.create());
 
 		}
 		items.add(new PopUpMenuItem.Builder(app)
 				.setTitleId(R.string.shared_string_share)
 				.setIcon(getContentIcon(R.drawable.ic_action_gshare_dark))
-				.setOnClickListener(v -> GpxSelectionHelper.getGpxFile(activity, file, true, gpxFile -> {
-					if (gpxFile.showCurrentTrack) {
-						GpxUiHelper.saveAndShareCurrentGpx(app, gpxFile);
-					} else if (!Algorithms.isEmpty(gpxFile.path)) {
-						GpxUiHelper.saveAndShareGpxWithAppearance(app, gpxFile);
-					}
+				.setOnClickListener(v -> GpxSelectionHelper.getGpxFile(activity, file == null ? null : SharedUtil.jFile(file), true, gpxFile -> {
+					GpxUiHelper.saveAndShareGpxWithAppearance(app, gpxFile);
 					return true;
 				}))
 				.create());
@@ -217,71 +261,90 @@ public class TrackFoldersHelper implements OnTrackFileMoveListener {
 		displayData.anchorView = view;
 		displayData.menuItems = items;
 		displayData.nightMode = fragment.isNightMode();
-		PopUpMenu.showSystemMenu(displayData);
+		PopUpMenu.show(displayData);
 	}
 
-	public void showItemsOptionsMenu(@NonNull Set<TrackItem> trackItems, @NonNull Set<TracksGroup> tracksGroups,
-	                                 @NonNull View view, @NonNull BaseTrackFolderFragment fragment) {
-		List<PopUpMenuItem> items = new ArrayList<>();
-		Set<TrackItem> selectedTrackItems = getSelectedTrackItems(trackItems, tracksGroups);
+	public void showItemsOptionsMenu(@NonNull View view, @Nullable TrackFolder trackFolder,
+	                                 @NonNull Set<TrackItem> items, @NonNull Set<TracksGroup> groups,
+	                                 @NonNull Fragment fragment, @NonNull FragmentStateHolder stateHolder,
+	                                 boolean nightMode) {
+		List<PopUpMenuItem> menuItems = new ArrayList<>();
+		Set<TrackItem> selectedTrackItems = getSelectedTrackItems(items, groups);
 
-		items.add(new PopUpMenuItem.Builder(app)
+		menuItems.add(new PopUpMenuItem.Builder(app)
 				.setTitleId(R.string.shared_string_show_on_map)
 				.setIcon(getContentIcon(R.drawable.ic_show_on_map))
 				.setOnClickListener(v -> {
-					gpxSelectionHelper.saveTracksVisibility(selectedTrackItems, fragment);
-					fragment.dismiss();
+					gpxSelectionHelper.saveTracksVisibility(selectedTrackItems, false);
+					dismissFragment(fragment, false);
 				})
 				.create()
 		);
-		items.add(new PopUpMenuItem.Builder(app)
+		menuItems.add(new PopUpMenuItem.Builder(app)
 				.setTitleId(R.string.shared_string_share)
 				.setIcon(getContentIcon(R.drawable.ic_action_gshare_dark))
 				.setOnClickListener(v -> {
-					showExportDialog(selectedTrackItems, fragment);
-					fragment.dismiss();
+					showExportDialog(selectedTrackItems, stateHolder);
+					dismissFragment(fragment, false);
 				})
 				.create()
 		);
-		PluginsHelper.onOptionsMenuActivity(activity, fragment, selectedTrackItems, items);
+		PluginsHelper.onOptionsMenuActivity(activity, fragment, selectedTrackItems, menuItems);
 
 		String move = app.getString(R.string.shared_string_move);
-		items.add(new PopUpMenuItem.Builder(app)
+		menuItems.add(new PopUpMenuItem.Builder(app)
 				.setTitle(move)
 				.setIcon(getContentIcon(R.drawable.ic_action_folder_move))
 				.setOnClickListener(v -> {
-					if (trackItems.isEmpty() && tracksGroups.isEmpty()) {
+					if (items.isEmpty() && groups.isEmpty()) {
 						showEmptyItemsToast(move);
 					} else {
+						File excludedDir = trackFolder != null ? SharedUtil.jFile(trackFolder.getDirFile()) : null;
 						FragmentManager manager = activity.getSupportFragmentManager();
-						MoveGpxFileBottomSheet.showInstance(manager, null, fragment, false, true);
+						MoveGpxFileBottomSheet.showInstance(manager, null, excludedDir, fragment, false, false);
 					}
 				})
 				.showTopDivider(true)
 				.create()
 		);
+
+		String changeActivity = app.getString(R.string.change_activity);
+		menuItems.add(new PopUpMenuItem.Builder(app)
+				.setTitle(changeActivity)
+				.setIcon(getContentIcon(R.drawable.ic_action_activity))
+				.setOnClickListener(v -> {
+					routeActivitySelectionHelper.setActivitySelectionListener(routeActivity -> {
+						RouteActivityHelper helper = app.getRouteActivityHelper();
+						helper.saveRouteActivity(items, routeActivity);
+						dismissFragment(fragment, false);
+					});
+					SelectRouteActivityController.showDialog(activity, routeActivitySelectionHelper);
+				})
+				.create()
+		);
+
 		String changeAppearance = app.getString(R.string.change_appearance);
-		items.add(new PopUpMenuItem.Builder(app)
+		menuItems.add(new PopUpMenuItem.Builder(app)
 				.setTitle(changeAppearance)
 				.setIcon(getContentIcon(R.drawable.ic_action_appearance))
 				.setOnClickListener(v -> {
 					if (selectedTrackItems.isEmpty()) {
 						showEmptyItemsToast(changeAppearance);
 					} else {
-						TracksAppearanceFragment.showInstance(activity.getSupportFragmentManager(), fragment);
+						ChangeAppearanceController.showDialog(activity, fragment, selectedTrackItems);
 					}
 				})
 				.create()
 		);
 		String delete = app.getString(R.string.shared_string_delete);
-		items.add(new PopUpMenuItem.Builder(app)
+		menuItems.add(new PopUpMenuItem.Builder(app)
 				.setTitle(delete)
 				.setIcon(getContentIcon(R.drawable.ic_action_delete_outlined))
 				.setOnClickListener(v -> {
-					if (trackItems.isEmpty() && tracksGroups.isEmpty()) {
+					if (items.isEmpty() && groups.isEmpty()) {
 						showEmptyItemsToast(delete);
 					} else {
-						showDeleteConfirmationDialog(trackItems, tracksGroups, fragment);
+						showDeleteConfirmationDialog(items, groups, fragment);
 					}
 				})
 				.showTopDivider(true)
@@ -290,30 +353,33 @@ public class TrackFoldersHelper implements OnTrackFileMoveListener {
 
 		PopUpMenuDisplayData displayData = new PopUpMenuDisplayData();
 		displayData.anchorView = view;
-		displayData.menuItems = items;
-		displayData.nightMode = fragment.isNightMode();
-		PopUpMenu.showSystemMenu(displayData);
+		displayData.menuItems = menuItems;
+		displayData.nightMode = nightMode;
+		PopUpMenu.show(displayData);
 	}
 
 	private void exportTrackItem(@NonNull OsmEditingPlugin plugin, @NonNull TrackItem trackItem, @NonNull BaseTrackFolderFragment fragment) {
 		if (trackItem.isShowCurrentTrack()) {
 			SavingTrackHelper savingTrackHelper = app.getSavingTrackHelper();
-			GPXFile gpxFile = savingTrackHelper.getCurrentTrack().getGpxFile();
+			GpxFile gpxFile = savingTrackHelper.getCurrentTrack().getGpxFile();
 
 			SaveGpxHelper.saveCurrentTrack(app, gpxFile, errorMessage -> {
 				if (errorMessage == null) {
-					plugin.sendGPXFiles(activity, fragment, new File(gpxFile.path));
+					plugin.sendGPXFiles(activity, fragment, new File(gpxFile.getPath()));
 				}
 			});
 		} else {
-			plugin.sendGPXFiles(activity, fragment, trackItem.getFile());
+			KFile kFile = trackItem.getFile();
+			plugin.sendGPXFiles(activity, fragment, kFile == null ? null : SharedUtil.jFile(kFile));
 		}
 	}
 
-	public void showTracksSelection(@NonNull TrackFolder trackFolder, @NonNull BaseTrackFolderFragment fragment,
-	                                @Nullable Set<TrackItem> trackItems, @Nullable Set<TracksGroup> tracksGroups) {
+	public void showTracksSelection(@NonNull TracksGroup trackFolder, @NonNull BaseTrackFolderFragment fragment,
+	                                @Nullable Set<TrackItem> trackItems, @Nullable Set<TracksGroup> tracksGroups,
+	                                @Nullable ScreenPositionData screenPositionData) {
 		FragmentManager manager = activity.getSupportFragmentManager();
-		TracksSelectionFragment.showInstance(manager, trackFolder, fragment, trackItems, tracksGroups);
+		TracksSelectionFragment.showInstance(
+				manager, trackFolder, fragment, trackItems, tracksGroups, screenPositionData);
 	}
 
 	@NonNull
@@ -337,21 +403,29 @@ public class TrackFoldersHelper implements OnTrackFileMoveListener {
 
 	private void showDeleteConfirmationDialog(@NonNull Set<TrackItem> trackItems,
 	                                          @NonNull Set<TracksGroup> tracksGroups,
-	                                          @NonNull BaseTrackFolderFragment fragment) {
+	                                          @NonNull Fragment fragment) {
 		String size = String.valueOf(trackItems.size() + tracksGroups.size());
 		String delete = app.getString(R.string.shared_string_delete);
 		AlertDialog.Builder builder = new AlertDialog.Builder(activity);
 		builder.setMessage(app.getString(R.string.local_index_action_do, delete.toLowerCase(), size));
 		builder.setPositiveButton(delete, (dialog, which) -> {
 			deleteTracks(trackItems, tracksGroups);
-			fragment.dismiss();
+			dismissFragment(fragment, true);
 		});
 		builder.setNegativeButton(R.string.shared_string_cancel, null);
 		builder.show();
 	}
 
+	private void dismissFragment(@NonNull Fragment fragment, boolean dismissImmediately) {
+		if (fragment instanceof BaseTrackFolderFragment) {
+			((BaseTrackFolderFragment) fragment).dismiss();
+		} else if (fragment instanceof SearchMyPlacesTracksFragment) {
+			((SearchMyPlacesTracksFragment) fragment).dismiss(dismissImmediately);
+		}
+	}
+
 	private void importTracks(@NonNull BaseTrackFolderFragment fragment) {
-		Intent intent = ImportHelper.getImportTrackIntent();
+		Intent intent = ImportHelper.getImportFileIntent();
 		intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
 		AndroidUtils.startActivityForResultIfSafe(fragment, intent, IMPORT_FILE_REQUEST);
 	}
@@ -376,12 +450,12 @@ public class TrackFoldersHelper implements OnTrackFileMoveListener {
 
 	public void deleteTrackFolder(@NonNull TrackFolder folder) {
 		for (TrackItem trackItem : folder.getFlattenedTrackItems()) {
-			File file = trackItem.getFile();
+			KFile file = trackItem.getFile();
 			if (file != null) {
-				FileUtils.removeGpxFile(app, file);
+				FileUtils.removeGpxFile(app, SharedUtil.jFile(file));
 			}
 		}
-		Algorithms.removeAllFiles(folder.getDirFile());
+		Algorithms.removeAllFiles(SharedUtil.jFile(folder.getDirFile()));
 	}
 
 	public void handleImport(@Nullable Intent data, @NonNull File destinationDir) {
@@ -400,6 +474,7 @@ public class TrackFoldersHelper implements OnTrackFileMoveListener {
 					@Override
 					public void onImportFinished() {
 						importing = false;
+						importHelper.setGpxImportListener(null);
 						if (gpxImportListener != null) {
 							gpxImportListener.onImportFinished();
 						}
@@ -422,13 +497,15 @@ public class TrackFoldersHelper implements OnTrackFileMoveListener {
 	}
 
 	public boolean isLoadingTracks() {
-		return asyncLoader == null || asyncLoader.getStatus() != Status.RUNNING;
+		return asyncLoader != null && asyncLoader.isRunning();
 	}
 
 	@Override
 	public void onFileMove(@Nullable File src, @NonNull File dest) {
-		if (dest.exists()) {
-			app.showToastMessage(R.string.file_with_name_already_exists);
+		if (src != null && dest.exists()) {
+			FragmentManager manager = activity.getSupportFragmentManager();
+			SaveExistingFileListener listener = getSaveFileListener(src, dest);
+			FileExistBottomSheet.showInstance(manager, dest.getName(), listener);
 		} else if (src != null && FileUtils.renameGpxFile(app, src, dest) != null) {
 			reloadTracks();
 		} else {
@@ -436,36 +513,68 @@ public class TrackFoldersHelper implements OnTrackFileMoveListener {
 		}
 	}
 
+	@NonNull
+	private SaveExistingFileListener getSaveFileListener(@NonNull File src, @NonNull File dest) {
+		return new SaveExistingFileListener() {
+			@Override
+			public void saveExistingFile(boolean overwrite) {
+				if (moveFile(overwrite)) {
+					reloadTracks();
+				} else {
+					app.showToastMessage(R.string.file_can_not_be_moved);
+				}
+			}
+
+			private boolean moveFile(boolean overwrite) {
+				if (overwrite) {
+					FileUtils.removeGpxFile(app, dest);
+					return FileUtils.renameGpxFile(app, src, dest) != null;
+				} else {
+					File destFile = dest;
+					File destDir = destFile.getParentFile();
+					while (destFile.exists()) {
+						destFile = new File(destDir, AndroidUtils.createNewFileName(destFile.getName()));
+					}
+					return FileUtils.renameGpxFile(app, src, destFile) != null;
+				}
+			}
+		};
+	}
+
 	public void moveTracks(@NonNull Set<TrackItem> items, @NonNull Set<TracksGroup> groups,
-	                       @NonNull File dest, @Nullable CallbackWithObject<Void> callback) {
-		MoveTrackFoldersTask task = new MoveTrackFoldersTask(activity, dest, items, groups, callback);
+	                       @NonNull File destDir, @Nullable CallbackWithObject<Void> callback) {
+		MoveTrackFoldersTask task = new MoveTrackFoldersTask(activity, destDir, items, groups, trackItems -> {
+			for (TrackItem item : trackItems) {
+				KFile src = item.getFile();
+				if (src != null) {
+					File dest = new File(destDir, src.name());
+					FragmentManager manager = activity.getSupportFragmentManager();
+					SaveExistingFileListener listener = getSaveFileListener(SharedUtil.jFile(src), dest);
+					FileExistBottomSheet.showInstance(manager, dest.getName(), listener);
+				}
+			}
+			if (callback != null) {
+				callback.processResult(null);
+			}
+			return true;
+		});
 		task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
 	}
 
-	public void renameFolder(@NonNull TrackFolder trackFolder, @NonNull String name, @Nullable CallbackWithObject<TrackFolder> callback) {
-		File oldDir = trackFolder.getDirFile();
-		File newDir = new File(oldDir.getParentFile(), name);
-		if (oldDir.renameTo(newDir)) {
-			TrackFolderLoaderTask task = new TrackFolderLoaderTask(app, newDir, newFolder -> {
-				if (callback != null) {
-					callback.processResult(newFolder);
-				}
-			});
-			task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
-		}
-	}
-
-	public void showExportDialog(@NonNull Collection<TrackItem> trackItems, @NonNull BaseTrackFolderFragment fragment) {
+	public void showExportDialog(@NonNull Collection<TrackItem> trackItems, @NonNull FragmentStateHolder fragment) {
 		if (Algorithms.isEmpty(trackItems)) {
 			app.showToastMessage(R.string.folder_export_empty_error);
 			return;
 		}
 		List<File> selectedFiles = new ArrayList<>();
 		for (TrackItem trackItem : trackItems) {
-			selectedFiles.add(trackItem.getFile());
+			KFile kFile = trackItem.getFile();
+			if(kFile != null) {
+				selectedFiles.add(SharedUtil.jFile(kFile));
+			}
 		}
-		HashMap<ExportSettingsType, List<?>> selectedTypes = new HashMap<>();
-		selectedTypes.put(ExportSettingsType.TRACKS, selectedFiles);
+		HashMap<ExportType, List<?>> selectedTypes = new HashMap<>();
+		selectedTypes.put(ExportType.TRACKS, selectedFiles);
 
 		Bundle bundle = new Bundle();
 		bundle.putSerializable(SELECTED_TYPES, selectedTypes);

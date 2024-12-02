@@ -25,7 +25,6 @@ import net.osmand.core.jni.MapMarkerBuilder;
 import net.osmand.core.jni.MapMarkersCollection;
 import net.osmand.core.jni.PointI;
 import net.osmand.core.jni.QVectorPointI;
-import net.osmand.core.jni.SWIGTYPE_p_sk_spT_SkImage_const_t;
 import net.osmand.core.jni.SwigUtilities;
 import net.osmand.core.jni.VectorDouble;
 import net.osmand.core.jni.VectorLine;
@@ -43,6 +42,7 @@ import net.osmand.plus.views.OsmandMapTileView;
 import net.osmand.plus.views.layers.base.OsmandMapLayer;
 import net.osmand.plus.views.layers.geometry.GeometryWay;
 import net.osmand.plus.views.layers.geometry.GeometryWayDrawer;
+import net.osmand.plus.views.layers.geometry.GeometryWayPathAlgorithms;
 import net.osmand.util.Algorithms;
 import net.osmand.util.MapUtils;
 
@@ -71,7 +71,8 @@ public class DistanceRulerControlLayer extends OsmandMapLayer {
 	private long touchStartTime;
 	private long touchEndTime;
 	private boolean touched;
-	private boolean wasZoom;
+	private boolean wasPinchZoomOrRotation;
+	private boolean wasDoubleTapZoom;
 
 	private final Path linePath = new Path();
 
@@ -106,8 +107,7 @@ public class DistanceRulerControlLayer extends OsmandMapLayer {
 		touchPoint = new PointF();
 		acceptableTouchRadius = app.getResources().getDimensionPixelSize(R.dimen.acceptable_touch_radius);
 
-		centerIconDay = BitmapFactory.decodeResource(view.getResources(), R.drawable.map_ruler_center_day);
-		centerIconNight = BitmapFactory.decodeResource(view.getResources(), R.drawable.map_ruler_center_night);
+		createBitmaps(view);
 
 		bitmapPaint = new Paint();
 		bitmapPaint.setAntiAlias(true);
@@ -127,6 +127,20 @@ public class DistanceRulerControlLayer extends OsmandMapLayer {
 		updateTextSize();
 	}
 
+	private void createBitmaps(@NonNull OsmandMapTileView view) {
+		centerIconDay = BitmapFactory.decodeResource(view.getResources(), R.drawable.map_ruler_center_day);
+		centerIconNight = BitmapFactory.decodeResource(view.getResources(), R.drawable.map_ruler_center_night);
+	}
+
+	@Override
+	protected void updateResources() {
+		super.updateResources();
+		if (view != null) {
+			createBitmaps(view);
+			updateTextSize();
+		}
+	}
+
 	@Override
 	public boolean isMapGestureAllowed(MapGestureType type) {
 		return !rulerModeOn() || type != MapGestureType.TWO_POINTERS_ZOOM_OUT;
@@ -143,7 +157,8 @@ public class DistanceRulerControlLayer extends OsmandMapLayer {
 						event.getX(), event.getY());
 				singleTouchPointChanged = true;
 				touchStartTime = System.currentTimeMillis();
-				wasZoom = false;
+				wasPinchZoomOrRotation = false;
+				wasDoubleTapZoom = false;
 			} else if (event.getAction() == MotionEvent.ACTION_MOVE && !touchOutside &&
 					!(touched && showDistBetweenFingerAndLocation)) {
 				double d = Math.sqrt(Math.pow(event.getX() - touchPoint.x, 2) + Math.pow(event.getY() - touchPoint.y, 2));
@@ -153,6 +168,7 @@ public class DistanceRulerControlLayer extends OsmandMapLayer {
 			} else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
 				touched = false;
 				touchEndTime = System.currentTimeMillis();
+				wasDoubleTapZoom = view.isAfterDoubleTap();
 				refreshMapDelayed();
 			}
 		}
@@ -181,18 +197,18 @@ public class DistanceRulerControlLayer extends OsmandMapLayer {
 				touched = false;
 				touchEndTime = currentTime;
 			}
-			if (tb.isZoomAnimated()) {
-				wasZoom = true;
+			if (getMapView().isPinchZoomingOrRotating()) {
+				wasPinchZoomOrRotation = true;
 			}
 
-			boolean showTwoFingersDistance = !tb.isZoomAnimated() &&
-					!view.isWasZoomInMultiTouch() &&
+			boolean showTwoFingersDistance =
 					currentTime - view.getMultiTouchStartTime() > DELAY_BEFORE_DRAW &&
 					(view.isMultiTouch() || currentTime - cacheMultiTouchEndTime < DRAW_TIME);
 
-			boolean showDistBetweenFingerAndLocation = !wasZoom &&
+			boolean showDistBetweenFingerAndLocation = !wasPinchZoomOrRotation &&
 					!showTwoFingersDistance &&
 					!view.isMultiTouch() &&
+					!wasDoubleTapZoom &&
 					!touchOutside &&
 					touchStartTime - view.getMultiTouchStartTime() > DELAY_BEFORE_DRAW &&
 					currentTime - touchStartTime > DELAY_BEFORE_DRAW &&
@@ -213,6 +229,10 @@ public class DistanceRulerControlLayer extends OsmandMapLayer {
 
 			this.showTwoFingersDistance = showTwoFingersDistance;
 			this.showDistBetweenFingerAndLocation = showDistBetweenFingerAndLocation;
+		} else {
+			if (hasMapRenderer) {
+				hideDistanceRulerOpenGl();
+			}
 		}
 	}
 
@@ -325,9 +345,7 @@ public class DistanceRulerControlLayer extends OsmandMapLayer {
 		boolean clearMyLocationDistance = disableMyLocationDistance || updateMyLocationDistance;
 
 		if (clearTwoFingersDistance || clearMyLocationDistance) {
-			clearVectorLinesCollection();
-			clearMapMarkersCollections();
-			linePath.reset();
+			hideDistanceRulerOpenGl();
 		}
 
 		cachedNightMode = nightMode;
@@ -411,7 +429,6 @@ public class DistanceRulerControlLayer extends OsmandMapLayer {
 		int y31 = MapUtils.get31TileNumberY(touchPoint.getLatitude());
 
 		Bitmap icon = night ? centerIconNight : centerIconDay;
-		SWIGTYPE_p_sk_spT_SkImage_const_t skImage = NativeUtilities.createSkImageFromBitmap(icon);
 
 		MapMarkerBuilder builder = new MapMarkerBuilder();
 		builder.setIsHidden(false)
@@ -420,7 +437,7 @@ public class DistanceRulerControlLayer extends OsmandMapLayer {
 				.setIsAccuracyCircleSupported(false)
 				.setPinIconHorisontalAlignment(PinIconHorisontalAlignment.CenterHorizontal)
 				.setPinIconVerticalAlignment(PinIconVerticalAlignment.CenterVertical)
-				.addOnMapSurfaceIcon(SwigUtilities.getOnSurfaceIconKey(1), skImage);
+				.addOnMapSurfaceIcon(SwigUtilities.getOnSurfaceIconKey(1), NativeUtilities.createSkImageFromBitmap(icon));
 
 		builder.buildAndAddToCollection(mapMarkersCollection);
 
@@ -455,7 +472,13 @@ public class DistanceRulerControlLayer extends OsmandMapLayer {
 		ty.add(end.y);
 
 		linePath.reset();
-		GeometryWay.calculatePath(tileBox, tx, ty, linePath);
+		GeometryWayPathAlgorithms.calculatePath(tileBox, tx, ty, linePath);
+	}
+
+	private void hideDistanceRulerOpenGl() {
+		clearVectorLinesCollection();
+		clearMapMarkersCollections();
+		linePath.reset();
 	}
 
 	@Override

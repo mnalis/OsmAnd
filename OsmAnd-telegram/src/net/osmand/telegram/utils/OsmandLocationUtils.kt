@@ -1,10 +1,10 @@
 package net.osmand.telegram.utils
 
 import android.os.AsyncTask
-import net.osmand.gpx.GPXUtilities
 import net.osmand.Location
 import net.osmand.data.LatLon
 import net.osmand.gpx.GPXFile
+import net.osmand.gpx.GPXUtilities
 import net.osmand.telegram.TelegramApplication
 import net.osmand.telegram.helpers.LocationMessages
 import net.osmand.telegram.helpers.LocationMessages.BufferMessage
@@ -12,12 +12,15 @@ import net.osmand.telegram.helpers.LocationMessages.LocationMessage
 import net.osmand.telegram.helpers.ShowLocationHelper
 import net.osmand.telegram.helpers.TelegramHelper
 import net.osmand.telegram.helpers.TelegramUiHelper
+import net.osmand.util.GeoParsedPoint
 import net.osmand.util.GeoPointParserUtil
 import net.osmand.util.MapUtils
-import org.drinkless.td.libcore.telegram.TdApi
+import org.drinkless.tdlib.TdApi
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.abs
 
 const val TRACKS_DIR = "tracker/"
@@ -53,6 +56,29 @@ object OsmandLocationUtils {
 
 	val UTC_TIME_FORMAT = SimpleDateFormat("HH:mm:ss", Locale.US).apply {
 		timeZone = TimeZone.getTimeZone("UTC")
+	}
+
+	fun convertLocation(l: android.location.Location?): Location? {
+		if (l == null) {
+			return null
+		}
+		val r = Location(l.provider)
+		r.latitude = l.latitude
+		r.longitude = l.longitude
+		r.time = l.time
+		if (l.hasAccuracy()) {
+			r.accuracy = l.accuracy
+		}
+		if (l.hasSpeed()) {
+			r.speed = l.speed
+		}
+		if (l.hasAltitude()) {
+			r.altitude = l.altitude
+		}
+		if (l.hasBearing()) {
+			r.bearing = l.bearing
+		}
+		return r
 	}
 
 	fun getLastUpdatedTime(message: TdApi.Message): Int {
@@ -100,8 +126,8 @@ object OsmandLocationUtils {
 
 	fun getSenderMessageId(message: TdApi.Message): Long {
 		val forwardInfo = message.forwardInfo
-		return if (forwardInfo != null && forwardInfo.origin is TdApi.MessageForwardOriginUser) {
-			(forwardInfo.origin as TdApi.MessageForwardOriginUser).senderUserId
+		return if (forwardInfo != null && forwardInfo.origin is TdApi.MessageOriginUser) {
+			(forwardInfo.origin as TdApi.MessageOriginUser).senderUserId
 		} else {
 			val sender = message.senderId
 			if (sender is TdApi.MessageSenderUser) {
@@ -228,8 +254,7 @@ object OsmandLocationUtils {
 								)
 							) {
 								val url = (urlTextEntity.type as TdApi.TextEntityTypeTextUrl).url
-								val point: GeoPointParserUtil.GeoParsedPoint? =
-									GeoPointParserUtil.parse(url)
+								val point: GeoParsedPoint? = GeoPointParserUtil.parse(url)
 								if (point != null) {
 									res.lat = point.latitude
 									res.lon = point.longitude
@@ -415,7 +440,7 @@ object OsmandLocationUtils {
 		}
 		val textMessage = builder.toString().trim()
 
-		return TdApi.InputMessageText(TdApi.FormattedText(textMessage, entities.toTypedArray()), true, true)
+		return TdApi.InputMessageText(TdApi.FormattedText(textMessage, entities.toTypedArray()), null, true)
 	}
 
 	fun convertLocationMessagesToGpxFiles(app: TelegramApplication, items: List<LocationMessage>, newGpxPerChat: Boolean = true): List<GPXFile> {
@@ -528,7 +553,7 @@ object OsmandLocationUtils {
 		var type: Int = -1
 			internal set
 
-		override fun getConstructor() = -1
+		override fun getConstructor() = TdApi.MessageLocation.CONSTRUCTOR
 
 		abstract fun isValid(): Boolean
 	}

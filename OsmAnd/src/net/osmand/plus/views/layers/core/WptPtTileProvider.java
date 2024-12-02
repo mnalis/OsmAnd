@@ -6,14 +6,14 @@ import android.graphics.Bitmap;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import net.osmand.gpx.GPXUtilities.WptPt;
+import net.osmand.shared.gpx.primitives.WptPt;
 import net.osmand.core.android.MapRendererView;
 import net.osmand.core.jni.MapMarker;
 import net.osmand.core.jni.MapTiledCollectionProvider;
 import net.osmand.core.jni.PointI;
 import net.osmand.core.jni.QListMapTiledCollectionPoint;
 import net.osmand.core.jni.QListPointI;
-import net.osmand.core.jni.SWIGTYPE_p_sk_spT_SkImage_const_t;
+import net.osmand.core.jni.SingleSkImage;
 import net.osmand.core.jni.SwigUtilities;
 import net.osmand.core.jni.TextRasterizer;
 import net.osmand.core.jni.TileId;
@@ -21,6 +21,7 @@ import net.osmand.core.jni.ZoomLevel;
 import net.osmand.core.jni.interface_MapTiledCollectionProvider;
 import net.osmand.plus.utils.NativeUtilities;
 import net.osmand.plus.views.PointImageDrawable;
+import net.osmand.plus.views.PointImageUtils;
 import net.osmand.util.MapUtils;
 
 import java.util.ArrayList;
@@ -38,8 +39,8 @@ public class WptPtTileProvider extends interface_MapTiledCollectionProvider {
 
    private final QListPointI points31 = new QListPointI();
    private final List<MapLayerData> mapLayerDataList = new ArrayList<>();
-   private final Map<Integer, Bitmap> bigBitmapCache = new ConcurrentHashMap<>();
-   private final Map<Integer, Bitmap> smallBitmapCache = new ConcurrentHashMap<>();
+   private final Map<Long, Bitmap> bigBitmapCache = new ConcurrentHashMap<>();
+   private final Map<Long, Bitmap> smallBitmapCache = new ConcurrentHashMap<>();
 
    private MapTiledCollectionProvider providerInstance;
    private final PointI offset;
@@ -109,34 +110,33 @@ public class WptPtTileProvider extends interface_MapTiledCollectionProvider {
    }
 
    @Override
-   public SWIGTYPE_p_sk_spT_SkImage_const_t getImageBitmap(int index, boolean isFullSize) {
+   public SingleSkImage getImageBitmap(int index, boolean isFullSize) {
       MapLayerData data = index < mapLayerDataList.size()
               ? mapLayerDataList.get(index) : null;
       if (data == null) {
          return SwigUtilities.nullSkImage();
       }
       Bitmap bitmap;
+      long key = data.getKey();
       if (isFullSize) {
-         int bigBitmapKey = data.getKey();
-         bitmap = bigBitmapCache.get(bigBitmapKey);
+         bitmap = bigBitmapCache.get(key);
          if (bitmap == null) {
             PointImageDrawable pointImageDrawable;
             if (data.hasMarker) {
-               pointImageDrawable = PointImageDrawable.getOrCreateSyncedIcon(ctx, data.color, data.wptPt);
+               pointImageDrawable = PointImageUtils.getOrCreateSyncedIcon(ctx, data.color, data.wptPt);
             } else {
-               pointImageDrawable = PointImageDrawable.getFromWpt(ctx, data.color, data.withShadow, data.wptPt);
+               pointImageDrawable = PointImageUtils.getFromPoint(ctx, data.color, data.withShadow, data.wptPt);
             }
             bitmap = pointImageDrawable.getBigMergedBitmap(data.textScale, data.history);
-            bigBitmapCache.put(bigBitmapKey, bitmap);
+            bigBitmapCache.put(key, bitmap);
          }
       } else {
-         int smallBitmapKey = data.getKey();
-         bitmap = smallBitmapCache.get(smallBitmapKey);
+         bitmap = smallBitmapCache.get(key);
          if (bitmap == null) {
-            PointImageDrawable pointImageDrawable = PointImageDrawable.getFromWpt(ctx, data.color,
+            PointImageDrawable pointImageDrawable = PointImageUtils.getFromPoint(ctx, data.color,
                     data.withShadow, data.wptPt);
             bitmap = pointImageDrawable.getSmallMergedBitmap(data.textScale);
-            smallBitmapCache.put(smallBitmapKey, bitmap);
+            smallBitmapCache.put(key, bitmap);
          }
       }
       return bitmap != null ? NativeUtilities.createSkImageFromBitmap(bitmap) : SwigUtilities.nullSkImage();
@@ -145,7 +145,7 @@ public class WptPtTileProvider extends interface_MapTiledCollectionProvider {
    @Override
    public String getCaption(int index) {
       MapLayerData data = index < mapLayerDataList.size() ? mapLayerDataList.get(index) : null;
-      return data != null ? data.wptPt.name : "";
+      return data != null ? data.wptPt.getName() : "";
    }
 
    @Override
@@ -214,13 +214,9 @@ public class WptPtTileProvider extends interface_MapTiledCollectionProvider {
          this.textScale = textScale;
       }
 
-      int getKey() {
-         long hash = ((long) color << 6) + ((long) wptPt.hashCode() << 4) + ((withShadow ? 1 : 0) << 3)
+      long getKey() {
+         return ((long) color << 6) + ((long) wptPt.hashCode() << 4) + ((withShadow ? 1 : 0) << 3)
                  + ((hasMarker ? 1 : 0) << 2) + (int) (textScale * 10) + (history ? 1 : 0);
-         if (hash >= Integer.MAX_VALUE || hash <= Integer.MIN_VALUE) {
-            return (int) (hash >> 4);
-         }
-         return (int) hash;
       }
    }
 }

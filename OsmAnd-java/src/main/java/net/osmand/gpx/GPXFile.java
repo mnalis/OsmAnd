@@ -1,5 +1,7 @@
 package net.osmand.gpx;
 
+import static net.osmand.gpx.GPXUtilities.PointsGroup.DEFAULT_WPT_GROUP_NAME;
+
 import net.osmand.data.QuadRect;
 import net.osmand.gpx.GPXTrackAnalysis.TrackPointsAnalyser;
 import net.osmand.gpx.GPXUtilities.Route;
@@ -18,9 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+@Deprecated
 public class GPXFile extends GPXUtilities.GPXExtensions {
-
-	private static final String DEFAULT_WPT_GROUP_NAME = "";
 
 	public String author;
 	public GPXUtilities.Metadata metadata = new GPXUtilities.Metadata();
@@ -29,7 +30,7 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 
 	final List<GPXUtilities.WptPt> points = new ArrayList<>();
 	Map<String, GPXUtilities.PointsGroup> pointsGroups = new LinkedHashMap<>();
-	private final Map<String, String> networkRouteKeyTags = new LinkedHashMap<>();
+	final Map<String, String> networkRouteKeyTags = new LinkedHashMap<>();
 
 	public Exception error = null;
 	public String path = "";
@@ -42,14 +43,12 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 	private GPXUtilities.TrkSegment generalSegment;
 
 	public GPXFile(String author) {
-		metadata.time = System.currentTimeMillis();
 		this.author = author;
 	}
 
 	public GPXFile(String title, String lang, String description) {
-		metadata.time = System.currentTimeMillis();
 		if (description != null) {
-			metadata.getExtensionsToWrite().put("desc", description);
+			metadata.desc = description;
 		}
 		if (lang != null) {
 			metadata.getExtensionsToWrite().put("article_lang", lang);
@@ -103,6 +102,10 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 		pointsGroups.clear();
 		modifiedTime = System.currentTimeMillis();
 		pointsModifiedTime = modifiedTime;
+	}
+
+	public void addParsedPoint(GPXUtilities.WptPt point) {
+		points.add(point);
 	}
 
 	public void addPoint(GPXUtilities.WptPt point) {
@@ -185,10 +188,10 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 		}
 	}
 
-	public void updateWptPt(String wptName, int wptIndex, GPXUtilities.WptPt newWpt) {
+	public void updateWptPt(String wptName, int wptIndex, GPXUtilities.WptPt newWpt, boolean updateTimestamp) {
 		GPXUtilities.WptPt currentWpt = getWptPt(wptName, wptIndex);
 		if (currentWpt != null) {
-			updateWptPt(currentWpt, newWpt);
+			updateWptPt(currentWpt, newWpt, updateTimestamp);
 		} else {
 			addPoint(newWpt);
 		}
@@ -205,13 +208,17 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 		return currentWpt;
 	}
 
-	public void updateWptPt(GPXUtilities.WptPt existingPoint, GPXUtilities.WptPt newWpt) {
+	public void updateWptPt(GPXUtilities.WptPt existingPoint, GPXUtilities.WptPt newWpt, boolean updateTimestamp) {
 		int index = points.indexOf(existingPoint);
 		if (index == -1) {
 			return;
 		}
 		String prevGroupName = existingPoint.category == null ? DEFAULT_WPT_GROUP_NAME : existingPoint.category;
+		long prevTime = existingPoint.time;
 		existingPoint.updatePoint(newWpt);
+		if (!updateTimestamp) {
+			existingPoint.time = prevTime;
+		}
 		if (Algorithms.stringsEqual(newWpt.category, prevGroupName)
 				|| Algorithms.isEmpty(newWpt.category) && Algorithms.isEmpty(prevGroupName)) {
 			removePointFromGroup(existingPoint, prevGroupName);
@@ -220,6 +227,10 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 		}
 		modifiedTime = System.currentTimeMillis();
 		pointsModifiedTime = modifiedTime;
+	}
+
+	public void updateWptPt(GPXUtilities.WptPt existingPoint, GPXUtilities.WptPt newWpt) {
+		updateWptPt(existingPoint, newWpt, true);
 	}
 
 	public void updatePointsGroup(String prevGroupName, GPXUtilities.PointsGroup pointsGroup) {
@@ -263,13 +274,13 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 	}
 
 	private void buildGeneralSegment() {
-		GPXUtilities.TrkSegment segment = new GPXUtilities.TrkSegment();
-		for (GPXUtilities.Track track : tracks) {
-			for (GPXUtilities.TrkSegment s : track.segments) {
-				if (s.points.size() > 0) {
-					List<GPXUtilities.WptPt> waypoints = new ArrayList<>(s.points.size());
-					for (GPXUtilities.WptPt wptPt : s.points) {
-						waypoints.add(new GPXUtilities.WptPt(wptPt));
+		TrkSegment segment = new TrkSegment();
+		for (Track track : tracks) {
+			for (TrkSegment trkSegment : track.segments) {
+				if (trkSegment.points.size() > 0) {
+					List<WptPt> waypoints = new ArrayList<>(trkSegment.points.size());
+					for (WptPt wptPt : trkSegment.points) {
+						waypoints.add(new WptPt(wptPt));
 					}
 					waypoints.get(0).firstPoint = true;
 					waypoints.get(waypoints.size() - 1).lastPoint = true;
@@ -290,8 +301,8 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 	public GPXTrackAnalysis getAnalysis(long fileTimestamp, Double fromDistance, Double toDistance, TrackPointsAnalyser pointsAnalyzer) {
 		GPXTrackAnalysis analysis = new GPXTrackAnalysis();
 		analysis.name = path;
-		analysis.wptPoints = points.size();
-		analysis.wptCategoryNames = getWaypointCategories();
+		analysis.setWptPoints(points.size());
+		analysis.setWptCategoryNames(getWaypointCategories());
 
 		List<SplitSegment> segments = getSplitSegments(analysis, fromDistance, toDistance);
 		analysis.prepareInformation(fileTimestamp, pointsAnalyzer, segments.toArray(new SplitSegment[0]));
@@ -304,7 +315,8 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 			GPXUtilities.Track subtrack = tracks.get(i);
 			for (GPXUtilities.TrkSegment segment : subtrack.segments) {
 				if (!segment.generalSegment) {
-					analysis.totalTracks++;
+					int totalTracks = analysis.getTotalTracks();
+					analysis.setTotalTracks(totalTracks + 1);
 					if (segment.points.size() > 1) {
 						splitSegments.add(createSplitSegment(segment, fromDistance, toDistance));
 					}
@@ -590,6 +602,16 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 		return tracks;
 	}
 
+	public List<TrkSegment> getSegments(boolean includeGeneralTrack) {
+		List<TrkSegment> segments = new ArrayList<>();
+		for (Track track : tracks) {
+			if (includeGeneralTrack || !track.generalTrack) {
+				segments.addAll(track.segments);
+			}
+		}
+		return segments;
+	}
+
 	public int getTracksCount() {
 		int count = 0;
 		for (GPXUtilities.Track track : tracks) {
@@ -633,6 +655,19 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 		return pointsGroups;
 	}
 
+	public List<Route> getRoutes() {
+		return routes;
+	}
+
+	public Route getRouteByName(String name) {
+		for (Route route : getRoutes()) {
+			if (Algorithms.stringsEqual(route.name, name)) {
+				return route;
+			}
+		}
+		return null;
+	}
+
 	public QuadRect getRect() {
 		return getBounds(0, 0);
 	}
@@ -669,6 +704,17 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 			return extensions.get("gradient_scale_type");
 		}
 		return null;
+	}
+
+	public String getGradientColorPalette() {
+		if (extensions != null) {
+			return extensions.get("color_palette");
+		}
+		return null;
+	}
+
+	public void setGradientColorPalette(String gradientColorPaletteName) {
+		getExtensionsToWrite().put("color_palette", gradientColorPaletteName);
 	}
 
 	public void setColoringType(String coloringType) {
@@ -736,6 +782,48 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 		getExtensionsToWrite().put("show_arrows", String.valueOf(showArrows));
 	}
 
+	public String get3DVisualizationType() {
+		return extensions == null ? null : extensions.get("line_3d_visualization_by_type");
+	}
+
+	public void set3DVisualizationType(String visualizationType) {
+		getExtensionsToWrite().put("line_3d_visualization_by_type", String.valueOf(visualizationType));
+	}
+
+	public String get3DWallColoringType() {
+		return extensions == null ? null : extensions.get("line_3d_visualization_wall_color_type");
+	}
+
+	public void set3DWallColoringType(String trackWallColoringType) {
+		getExtensionsToWrite().put("line_3d_visualization_wall_color_type", String.valueOf(trackWallColoringType));
+	}
+
+	public String get3DLinePositionType() {
+		return extensions == null ? null : extensions.get("line_3d_visualization_position_type");
+	}
+
+	public void set3DLinePositionType(String trackLinePositionType) {
+		getExtensionsToWrite().put("line_3d_visualization_position_type", String.valueOf(trackLinePositionType));
+	}
+
+	public void setAdditionalExaggeration(float additionalExaggeration) {
+		getExtensionsToWrite().put("vertical_exaggeration_scale", String.valueOf(additionalExaggeration));
+	}
+
+	public float getAdditionalExaggeration() {
+		String exaggeration = getExtensionsToRead().get("vertical_exaggeration_scale");
+		return Algorithms.parseFloatSilently(exaggeration, 1f);
+	}
+
+	public void setElevationMeters(float elevation) {
+		getExtensionsToWrite().put("elevation_meters", String.valueOf(elevation));
+	}
+
+	public float getElevationMeters() {
+		String elevation = getExtensionsToRead().get("elevation_meters");
+		return Algorithms.parseFloatSilently(elevation, 1000f);
+	}
+
 	public boolean isShowStartFinishSet() {
 		return extensions != null && extensions.containsKey("show_start_finish");
 	}
@@ -753,7 +841,6 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 
 	public void addRouteKeyTags(Map<String, String> routeKey) {
 		networkRouteKeyTags.putAll(routeKey);
-		setExtensionsWriter(Algorithms.isEmpty(networkRouteKeyTags) ? null : GPXUtilities.createNetworkRouteExtensionWriter(networkRouteKeyTags));
 	}
 
 	public Map<String, String> getRouteKeyTags() {
@@ -802,10 +889,30 @@ public class GPXFile extends GPXUtilities.GPXExtensions {
 		if (metadata.bounds != null) {
 			size++;
 		}
+		size += getExtensionsToWrite().size();
+		size += getExtensionsWriters().size();
 
-		if (!getExtensionsToWrite().isEmpty() || getExtensionsWriter() != null) {
-			size++;
-		}
 		return size;
+	}
+
+	public long getLastPointTime() {
+		long time = getLastPointTime(getAllSegmentsPoints());
+		if (time == 0) {
+			time = getLastPointTime(getRoutePoints());
+		}
+		if (time == 0) {
+			time = getLastPointTime(getPoints());
+		}
+		return time;
+	}
+
+	private long getLastPointTime(List<WptPt> points) {
+		for (int i = points.size() - 1; i >= 0; i--) {
+			WptPt point = points.get(i);
+			if (point.time > 0) {
+				return point.time;
+			}
+		}
+		return 0;
 	}
 }

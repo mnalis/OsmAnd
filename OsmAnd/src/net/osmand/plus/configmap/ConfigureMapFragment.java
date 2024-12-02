@@ -1,5 +1,7 @@
 package net.osmand.plus.configmap;
 
+import static net.osmand.aidlapi.OsmAndCustomizationConstants.GPX_FILES_ID;
+
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -22,11 +24,13 @@ import net.osmand.plus.helpers.AndroidUiHelper;
 import net.osmand.plus.inapp.InAppPurchaseHelper.InAppPurchaseListener;
 import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.settings.backend.preferences.ListStringPreference;
+import net.osmand.plus.track.helpers.SelectGpxTask.SelectGpxTaskListener;
+import net.osmand.plus.track.helpers.SelectedGpxFile;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.ColorUtilities;
 import net.osmand.plus.utils.UiUtilities;
 import net.osmand.plus.widgets.ctxmenu.ContextMenuAdapter;
-import net.osmand.plus.widgets.ctxmenu.CtxMenuUtils;
+import net.osmand.plus.widgets.ctxmenu.ContextMenuUtils;
 import net.osmand.plus.widgets.ctxmenu.ViewCreator;
 import net.osmand.plus.widgets.ctxmenu.callback.ItemClickListener;
 import net.osmand.plus.widgets.ctxmenu.callback.OnDataChangeUiAdapter;
@@ -38,7 +42,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-public class ConfigureMapFragment extends BaseOsmAndFragment implements OnDataChangeUiAdapter, InAppPurchaseListener {
+public class ConfigureMapFragment extends BaseOsmAndFragment implements OnDataChangeUiAdapter,
+		InAppPurchaseListener, SelectGpxTaskListener {
 
 	public static final String TAG = ConfigureMapFragment.class.getSimpleName();
 
@@ -49,7 +54,7 @@ public class ConfigureMapFragment extends BaseOsmAndFragment implements OnDataCh
 	private Map<ContextMenuItem, List<ContextMenuItem>> items;
 	private ViewCreator viewCreator;
 
-	private LinearLayout llList;
+	private LinearLayout itemsContainer;
 	private ListStringPreference collapsedIds;
 	private View.OnClickListener itemsClickListener;
 	private final Map<Integer, View> views = new HashMap<>();
@@ -75,7 +80,7 @@ public class ConfigureMapFragment extends BaseOsmAndFragment implements OnDataCh
 	                         @Nullable Bundle savedInstanceState) {
 		updateNightMode();
 		View view = inflater.inflate(R.layout.fragment_configure_map, container, false);
-		llList = view.findViewById(R.id.list);
+		itemsContainer = view.findViewById(R.id.list);
 		onDataSetInvalidated();
 		return view;
 	}
@@ -97,7 +102,7 @@ public class ConfigureMapFragment extends BaseOsmAndFragment implements OnDataCh
 			item.refreshWithActualData();
 			View view = views.get(item.getTitleId());
 			if (view != null) {
-				bindItemView(item, llList);
+				bindItemView(item, itemsContainer);
 			}
 		}
 	}
@@ -107,33 +112,43 @@ public class ConfigureMapFragment extends BaseOsmAndFragment implements OnDataCh
 		recreateView();
 	}
 
+	@Override
+	public void onGpxSelectionInProgress(@NonNull SelectedGpxFile selectedGpxFile) {
+		onRefreshItem(GPX_FILES_ID);
+	}
+
+	@Override
+	public void onGpxSelectionFinished() {
+		onRefreshItem(GPX_FILES_ID);
+	}
+
 	private void recreateView() {
 		FragmentActivity activity = getActivity();
 		if (activity != null) {
 			appMode = settings.getApplicationMode();
 			useAnimation = !settings.DO_NOT_USE_ANIMATIONS.getModeValue(appMode);
 
+			updateNightMode();
 			viewCreator = new ViewCreator(activity, nightMode);
 			viewCreator.setDefaultLayoutId(R.layout.list_item_icon_and_menu);
 			viewCreator.setCustomControlsColor(appMode.getProfileColor(nightMode));
 			viewCreator.setUiAdapter(this);
 
-			int bgColor = ColorUtilities.getActivityBgColor(app, nightMode);
-			llList.setBackgroundColor(bgColor);
-
 			views.clear();
-			llList.removeAllViews();
+			itemsContainer.removeAllViews();
+			itemsContainer.setBackgroundColor(ColorUtilities.getActivityBgColor(app, nightMode));
+
 			updateItemsData();
 			updateItemsView();
 		}
 	}
 
 	private void updateItemsData() {
-		ConfigureMapMenu menu = new ConfigureMapMenu();
+		ConfigureMapMenu menu = new ConfigureMapMenu(app);
 		adapter = menu.createListAdapter(mapActivity);
-		CtxMenuUtils.removeHiddenItems(adapter);
-		CtxMenuUtils.hideExtraDividers(adapter);
-		items = CtxMenuUtils.collectItemsByCategories(adapter.getItems());
+		ContextMenuUtils.removeHiddenItems(adapter);
+		ContextMenuUtils.hideExtraDividers(adapter);
+		items = ContextMenuUtils.collectItemsByCategories(adapter.getItems());
 		ContextMenuItem bottomShadow = new ContextMenuItem(null);
 		bottomShadow.setLayout(R.layout.card_bottom_divider);
 		items.put(bottomShadow, null);
@@ -145,7 +160,7 @@ public class ConfigureMapFragment extends BaseOsmAndFragment implements OnDataCh
 			if (topItem.isCategory() && nestedItems != null) {
 				bindCategoryView(topItem, nestedItems);
 			} else {
-				bindItemView(topItem, llList);
+				bindItemView(topItem, itemsContainer);
 			}
 		}
 	}
@@ -154,7 +169,7 @@ public class ConfigureMapFragment extends BaseOsmAndFragment implements OnDataCh
 	                              @NonNull List<ContextMenuItem> nestedItems) {
 		// Use the same layout for all categories views
 		category.setLayout(R.layout.list_item_expandable_category);
-		category.setDescription(CtxMenuUtils.getCategoryDescription(nestedItems));
+		category.setDescription(ContextMenuUtils.getCategoryDescription(nestedItems));
 
 		String id = category.getId();
 		int standardId = category.getTitleId();
@@ -166,7 +181,7 @@ public class ConfigureMapFragment extends BaseOsmAndFragment implements OnDataCh
 		view.setFocusable(true);
 		if (existedView == null) {
 			views.put(standardId, view);
-			llList.addView(view);
+			itemsContainer.addView(view);
 		}
 		updateCategoryView(category);
 
@@ -271,6 +286,18 @@ public class ConfigureMapFragment extends BaseOsmAndFragment implements OnDataCh
 		int profileColor = appMode.getProfileColor(nightMode);
 		Drawable background = UiUtilities.getColoredSelectableDrawable(app, profileColor, 0.3f);
 		AndroidUtils.setBackground(view, background);
+	}
+
+	@Override
+	public void onResume() {
+		super.onResume();
+		app.getSelectedGpxHelper().addListener(this);
+	}
+
+	@Override
+	public void onPause() {
+		super.onPause();
+		app.getSelectedGpxHelper().removeListener(this);
 	}
 
 	@Nullable

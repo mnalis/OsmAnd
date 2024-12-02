@@ -8,7 +8,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
+import androidx.annotation.Nullable;
 
 import com.google.android.material.snackbar.Snackbar;
 import com.jwetherell.openmap.common.LatLonPoint;
@@ -29,8 +29,10 @@ import net.osmand.plus.utils.ColorUtilities;
 import net.osmand.plus.utils.UiUtilities;
 import net.osmand.plus.views.layers.MapInfoLayer;
 import net.osmand.plus.views.layers.MapInfoLayer.TextState;
+import net.osmand.plus.views.layers.base.OsmandMapLayer.DrawSettings;
 import net.osmand.plus.views.mapwidgets.WidgetType;
 import net.osmand.plus.views.mapwidgets.WidgetsPanel;
+import net.osmand.util.TextDirectionUtil;
 
 import org.apache.commons.logging.Log;
 
@@ -44,13 +46,19 @@ public abstract class CoordinatesBaseWidget extends MapWidget {
 	protected LatLon lastLocation;
 
 	protected final View divider;
-	protected final View secondContainer;
+	protected View firstContainer;
+	protected View secondContainer;
 
-	protected final TextView firstCoordinate;
-	protected final TextView secondCoordinate;
+	protected TextView firstCoordinate;
+	protected TextView secondCoordinate;
 
-	protected final ImageView firstIcon;
-	protected final ImageView secondIcon;
+	private String firstCoordinateText = "";
+	private String secondCoordinateText = "";
+
+	protected ImageView firstIcon;
+	protected ImageView secondIcon;
+
+	private boolean cachedLayoutRtl;
 
 	protected int getLayoutId() {
 		return R.layout.coordinates_widget;
@@ -60,26 +68,55 @@ public abstract class CoordinatesBaseWidget extends MapWidget {
 		super(mapActivity, widgetType);
 
 		divider = view.findViewById(R.id.divider);
-		secondContainer = view.findViewById(R.id.second_container);
-
-		firstCoordinate = view.findViewById(R.id.first_coordinate);
-		secondCoordinate = view.findViewById(R.id.second_coordinate);
-
-		firstIcon = view.findViewById(R.id.first_icon);
-		secondIcon = view.findViewById(R.id.second_icon);
+		updateViewIds(isLayoutRtl());
 
 		view.setOnClickListener(v -> copyCoordinates());
 		updateVisibility(false);
 	}
 
+	@Override
+	public void updateInfo(@Nullable DrawSettings drawSettings) {
+		checkLayoutDirection();
+	}
+
+	private void checkLayoutDirection() {
+		boolean isLayoutRtl = isLayoutRtl();
+		if (cachedLayoutRtl != isLayoutRtl) {
+			cachedLayoutRtl = isLayoutRtl;
+			updateViewIds(isLayoutRtl);
+		}
+	}
+
+	private void updateViewIds(boolean isLayoutRtl) {
+		if (isLayoutRtl) {
+			firstContainer = view.findViewById(R.id.second_container);
+			secondContainer = view.findViewById(R.id.first_coordinates_container);
+
+			firstCoordinate = view.findViewById(R.id.second_coordinate);
+			secondCoordinate = view.findViewById(R.id.first_coordinate);
+
+			firstIcon = view.findViewById(R.id.second_icon);
+			secondIcon = view.findViewById(R.id.first_icon);
+		} else {
+			firstContainer = view.findViewById(R.id.first_coordinates_container);
+			secondContainer = view.findViewById(R.id.second_container);
+
+			firstCoordinate = view.findViewById(R.id.first_coordinate);
+			secondCoordinate = view.findViewById(R.id.second_coordinate);
+
+			firstIcon = view.findViewById(R.id.first_icon);
+			secondIcon = view.findViewById(R.id.second_icon);
+		}
+	}
+
 	protected void copyCoordinates() {
 		if (lastLocation != null) {
-			String coordinates = firstCoordinate.getText().toString();
+			String coordinates = firstCoordinateText;
 			if (secondContainer.getVisibility() == View.VISIBLE) {
-				coordinates += ", " + secondCoordinate.getText().toString();
+				coordinates += ", " + secondCoordinateText;
 			}
 			if (ShareMenu.copyToClipboard(app, coordinates)) {
-				showShareSnackbar(coordinates);
+				showShareSnackbar(TextDirectionUtil.markAsLTR(coordinates));
 			}
 		}
 	}
@@ -123,13 +160,13 @@ public abstract class CoordinatesBaseWidget extends MapWidget {
 	private void showUtmCoordinates(double lat, double lon) {
 		setupForNonStandardFormat();
 		ZonedUTMPoint utmPoint = new ZonedUTMPoint(new LatLonPoint(lat, lon));
-		firstCoordinate.setText(utmPoint.format());
+		setFirstCoordinateText(utmPoint.format());
 	}
 
 	private void showMgrsCoordinates(double lat, double lon) {
 		setupForNonStandardFormat();
 		MGRSPoint mgrsPoint = new MGRSPoint(new LatLonPoint(lat, lon));
-		firstCoordinate.setText(mgrsPoint.toFlavoredString(5));
+		setFirstCoordinateText(mgrsPoint.toFlavoredString(5));
 	}
 
 	private void showOlcCoordinates(double lat, double lon) {
@@ -142,7 +179,7 @@ public abstract class CoordinatesBaseWidget extends MapWidget {
 			log.error("Failed to define OLC location", e);
 			olcCoordinates = "0, 0";
 		}
-		firstCoordinate.setText(olcCoordinates);
+		setFirstCoordinateText(olcCoordinates);
 	}
 
 	private void showSwissGrid(double lat, double lon, boolean swissGridPlus){
@@ -158,13 +195,14 @@ public abstract class CoordinatesBaseWidget extends MapWidget {
 		firstIcon.setImageDrawable(getLatitudeIcon(lat));
 		secondIcon.setImageDrawable(getLongitudeIcon(lon));
 
-		firstCoordinate.setText(swissGridFormat.format(swissGrid[0]));
-		secondCoordinate.setText(swissGridFormat.format(swissGrid[1]));
+		setFirstCoordinateText(swissGridFormat.format(swissGrid[0]));
+		setSecondCoordinateText(swissGridFormat.format(swissGrid[1]));
 	}
 
 	private void setupForNonStandardFormat() {
 		AndroidUiHelper.updateVisibility(firstIcon, true);
 		AndroidUiHelper.updateVisibility(divider, false);
+		AndroidUiHelper.updateVisibility(firstContainer, true);
 		AndroidUiHelper.updateVisibility(secondContainer, false);
 
 		firstIcon.setImageDrawable(getUtmIcon());
@@ -173,6 +211,7 @@ public abstract class CoordinatesBaseWidget extends MapWidget {
 	private void showStandardCoordinates(double lat, double lon, int format) {
 		AndroidUiHelper.updateVisibility(firstIcon, true);
 		AndroidUiHelper.updateVisibility(divider, true);
+		AndroidUiHelper.updateVisibility(firstContainer, true);
 		AndroidUiHelper.updateVisibility(secondContainer, true);
 
 		String latitude = "";
@@ -187,8 +226,26 @@ public abstract class CoordinatesBaseWidget extends MapWidget {
 		firstIcon.setImageDrawable(getLatitudeIcon(lat));
 		secondIcon.setImageDrawable(getLongitudeIcon(lon));
 
-		firstCoordinate.setText(latitude);
-		secondCoordinate.setText(longitude);
+		setFirstCoordinateText(latitude);
+		setSecondCoordinateText(longitude);
+	}
+
+	protected void setFirstCoordinateText(@NonNull String text) {
+		firstCoordinateText = text;
+		setCoordinateText(firstCoordinate, text);
+	}
+
+	protected void setSecondCoordinateText(@NonNull String text) {
+		secondCoordinateText = text;
+		setCoordinateText(secondCoordinate, text);
+	}
+
+	private void setCoordinateText(@NonNull TextView textView, @NonNull String text) {
+		AndroidUtils.setTruncatedText(textView, TextDirectionUtil.markAsLTR(text));
+	}
+
+	protected void setCoordinateIcon(@NonNull ImageView imageView, @NonNull Drawable drawable) {
+		imageView.setImageDrawable(drawable);
 	}
 
 	@NonNull
@@ -229,7 +286,7 @@ public abstract class CoordinatesBaseWidget extends MapWidget {
 		if (updatedVisibility && widgetType.getPanel(settings) == WidgetsPanel.TOP) {
 			MapInfoLayer mapInfoLayer = mapActivity.getMapLayers().getMapInfoLayer();
 			if (mapInfoLayer != null) {
-				mapInfoLayer.recreateTopWidgetsPanel();
+				mapInfoLayer.updateVerticalPanels();
 			}
 			mapActivity.updateStatusBarColor();
 		}
@@ -238,15 +295,22 @@ public abstract class CoordinatesBaseWidget extends MapWidget {
 
 	public void updateColors(@NonNull TextState textState) {
 		super.updateColors(textState);
+		checkLayoutDirection();
 
 		divider.setBackgroundColor(ColorUtilities.getDividerColor(app, isNightMode()));
-
-		int textColor = ContextCompat.getColor(app, R.color.activity_background_light);
+		int textColor = textState.textColor;
 		firstCoordinate.setTextColor(textColor);
 		secondCoordinate.setTextColor(textColor);
 
 		int typefaceStyle = textState.textBold ? Typeface.BOLD : Typeface.NORMAL;
 		firstCoordinate.setTypeface(Typeface.DEFAULT, typefaceStyle);
 		secondCoordinate.setTypeface(Typeface.DEFAULT, typefaceStyle);
+
+		view.setBackgroundResource(textState.widgetBackgroundId);
+		updateInfo(null);
+	}
+
+	private boolean isLayoutRtl() {
+		return AndroidUtils.isLayoutMirrored(view);
 	}
 }

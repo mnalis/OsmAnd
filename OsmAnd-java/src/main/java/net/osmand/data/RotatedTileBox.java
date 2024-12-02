@@ -1,12 +1,17 @@
 package net.osmand.data;
 
+import net.osmand.util.Algorithms;
 import net.osmand.util.MapUtils;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class RotatedTileBox {
 
 	/// primary fields
 	private double lat;
 	private double lon;
+	private float height;
 	private float rotate;
 	private float density;
 	private int zoom;
@@ -30,6 +35,7 @@ public class RotatedTileBox {
 	private double oyTile;
 	private QuadRect tileBounds;
 	private QuadRect latLonBounds;
+	private List<LatLon> rotatedLatLonBounds;
 	private QuadPointDouble tileLT;
 	private QuadPointDouble tileRT;
 	private QuadPointDouble tileRB;
@@ -63,13 +69,18 @@ public class RotatedTileBox {
 		rotateSin = r.rotateSin;
 		oxTile = r.oxTile;
 		oyTile = r.oyTile;
-		if (r.tileBounds != null && r.latLonBounds != null) {
+		if (r.tileBounds != null && r.latLonBounds != null && !Algorithms.isEmpty(r.rotatedLatLonBounds)) {
 			tileBounds = new QuadRect(r.tileBounds);
 			latLonBounds = new QuadRect(r.latLonBounds);
 			tileLT = new QuadPointDouble(r.tileLT);
 			tileRT = new QuadPointDouble(r.tileRT);
 			tileRB = new QuadPointDouble(r.tileRB);
 			tileLB = new QuadPointDouble(r.tileLB);
+
+			rotatedLatLonBounds = new ArrayList<>();
+			for (LatLon latLon : r.rotatedLatLonBounds) {
+				rotatedLatLonBounds.add(new LatLon(latLon.getLatitude(), latLon.getLongitude()));
+			}
 		}
 	}
 
@@ -193,6 +204,12 @@ public class RotatedTileBox {
 		float right = (float) MapUtils.getLongitudeFromTile(zoom, alignTile(bounds.right));
 		tileBounds = bounds;
 		latLonBounds = new QuadRect(left, top, right, bottom);
+
+		rotatedLatLonBounds = new ArrayList<>();
+		rotatedLatLonBounds.add(new LatLon(MapUtils.getLatitudeFromTile(zoom, alignTile(y1)), MapUtils.getLongitudeFromTile(zoom, alignTile(x1))));
+		rotatedLatLonBounds.add(new LatLon(MapUtils.getLatitudeFromTile(zoom, alignTile(y2)), MapUtils.getLongitudeFromTile(zoom, alignTile(x2))));
+		rotatedLatLonBounds.add(new LatLon(MapUtils.getLatitudeFromTile(zoom, alignTile(y3)), MapUtils.getLongitudeFromTile(zoom, alignTile(x3))));
+		rotatedLatLonBounds.add(new LatLon(MapUtils.getLatitudeFromTile(zoom, alignTile(y4)), MapUtils.getLongitudeFromTile(zoom, alignTile(x4))));
 	}
 	
 	private double alignTile(double tile) {
@@ -323,6 +340,10 @@ public class RotatedTileBox {
 		return rotateSin;
 	}
 
+	public double getFullZoom() {
+		return getZoom() + getZoomFloatPart() + getZoomAnimation();
+	}
+
 	public int getZoom() {
 		return zoom;
 	}
@@ -347,6 +368,10 @@ public class RotatedTileBox {
 		this.lat = lat;
 		this.lon = lon;
 		calculateDerivedFields();
+	}
+
+	public void setHeight(float height) {
+		this.height = height;
 	}
 
 	public void setRotate(float rotate) {
@@ -460,6 +485,10 @@ public class RotatedTileBox {
 		calculateDerivedFields();
 	}
 
+	public float getHeight() {
+		return height;
+	}
+
 	public float getRotate() {
 		return rotate;
 	}
@@ -504,6 +533,21 @@ public class RotatedTileBox {
 		double tx = getPixXFromTile(qp.x, qp.y);
 		double ty = getPixYFromTile(qp.x, qp.y);
 		return tx >= 0 && tx <= pixWidth && ty >= 0 && ty <= pixHeight;
+	}
+
+	public boolean containsRectInRotatedRect(double left, double top, double right, double bottom) {
+		List<LatLon> rect = new ArrayList<>();
+		rect.add(new LatLon(top, left));
+		rect.add(new LatLon(top, right));
+		rect.add(new LatLon(bottom, right));
+		rect.add(new LatLon(bottom, left));
+		rect.add(rect.get(0));
+
+		checkTileRectangleCalculated();
+		List<LatLon> rotatedLatLonRect = new ArrayList<>(this.rotatedLatLonBounds);
+		rotatedLatLonRect.add(rotatedLatLonRect.get(0));
+
+		return Algorithms.isFirstPolygonInsideSecond(rect, rotatedLatLonRect);
 	}
 
 	public boolean containsLatLon(double lat, double lon) {

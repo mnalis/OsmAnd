@@ -34,11 +34,8 @@ import net.osmand.plus.helpers.AndroidUiHelper;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.UiUtilities;
 import net.osmand.plus.views.MapLayers;
-import net.osmand.plus.views.controls.maphudbuttons.MyLocationButton;
-import net.osmand.plus.views.controls.maphudbuttons.ZoomInButton;
-import net.osmand.plus.views.controls.maphudbuttons.ZoomOutButton;
 import net.osmand.plus.views.layers.MapControlsLayer;
-import net.osmand.plus.views.layers.MapInfoLayer;
+import net.osmand.plus.views.mapwidgets.widgets.RulerWidget;
 import net.osmand.plus.widgets.dialogbutton.DialogButton;
 
 import org.apache.commons.logging.Log;
@@ -122,21 +119,16 @@ public class SnapTrackWarningFragment extends BaseOsmAndFragment {
 	}
 
 	private void setupControlButtons(@NonNull View view) {
-		MapActivity mapActivity = getMapActivity();
-		ImageView zoomInButtonView = view.findViewById(R.id.map_zoom_in_button);
-		ImageView zoomOutButtonView = view.findViewById(R.id.map_zoom_out_button);
-		ImageView myLocButtonView = view.findViewById(R.id.map_my_location_button);
-		View mapRulerView = view.findViewById(R.id.map_ruler_layout);
+		MapActivity activity = getMapActivity();
+		MapLayers mapLayers = activity.getMapLayers();
+		MapControlsLayer controlsLayer = mapLayers.getMapControlsLayer();
 
-		MapLayers mapLayers = mapActivity.getMapLayers();
-		MapControlsLayer mapControlsLayer = mapLayers.getMapControlsLayer();
+		controlsLayer.addCustomMapButton(view.findViewById(R.id.map_zoom_in_button));
+		controlsLayer.addCustomMapButton(view.findViewById(R.id.map_zoom_out_button));
+		controlsLayer.addCustomMapButton(view.findViewById(R.id.map_my_location_button));
 
-		mapControlsLayer.addMapButton(new ZoomInButton(mapActivity, zoomInButtonView, ZOOM_IN_BUTTON_ID));
-		mapControlsLayer.addMapButton(new ZoomOutButton(mapActivity, zoomOutButtonView, ZOOM_OUT_BUTTON_ID));
-		mapControlsLayer.addMapButton(new MyLocationButton(mapActivity, myLocButtonView, BACK_TO_LOC_BUTTON_ID, false));
-
-		MapInfoLayer mapInfoLayer = mapLayers.getMapInfoLayer();
-		mapInfoLayer.setupRulerWidget(mapRulerView);
+		RulerWidget mapRuler = view.findViewById(R.id.map_ruler_layout);
+		mapLayers.getMapInfoLayer().setupRulerWidget(mapRuler);
 	}
 
 	private void setupActionButtons(@NonNull View view) {
@@ -220,7 +212,7 @@ public class SnapTrackWarningFragment extends BaseOsmAndFragment {
 		}
 	}
 
-	private void refreshControlsButtons(){
+	private void refreshControlsButtons() {
 		app.getOsmandMap().getMapLayers().getMapControlsLayer().refreshButtons();
 	}
 

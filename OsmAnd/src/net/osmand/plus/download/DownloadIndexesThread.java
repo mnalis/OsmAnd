@@ -19,10 +19,10 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.UiThread;
 import androidx.appcompat.app.AlertDialog;
+import androidx.fragment.app.FragmentActivity;
 
 import net.osmand.IndexConstants;
 import net.osmand.PlatformUtil;
-import net.osmand.core.android.MapRendererContext;
 import net.osmand.map.WorldRegion;
 import net.osmand.map.WorldRegion.RegionParams;
 import net.osmand.plus.OsmandApplication;
@@ -31,28 +31,20 @@ import net.osmand.plus.Version;
 import net.osmand.plus.base.BasicProgressAsyncTask;
 import net.osmand.plus.download.DatabaseHelper.HistoryDownloadEntry;
 import net.osmand.plus.download.DownloadFileHelper.DownloadFileShowWarning;
+import net.osmand.plus.download.IndexItem.DownloadEntry;
 import net.osmand.plus.notifications.OsmandNotification.NotificationType;
 import net.osmand.plus.plugins.PluginsHelper;
-import net.osmand.plus.plugins.weather.OfflineForecastHelper;
-import net.osmand.plus.plugins.weather.indexitem.WeatherIndexItem;
 import net.osmand.plus.resources.ResourceManager;
 import net.osmand.plus.settings.backend.preferences.OsmandPreference;
 import net.osmand.plus.utils.AndroidNetworkUtils;
 import net.osmand.plus.utils.AndroidUtils;
-import net.osmand.plus.views.corenative.NativeCoreContext;
 import net.osmand.util.Algorithms;
 
 import org.apache.commons.logging.Log;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 @SuppressLint({"NewApi", "DefaultLocale"})
@@ -75,11 +67,17 @@ public class DownloadIndexesThread {
 
 	public interface DownloadEvents {
 
-		void onUpdatedIndexesList();
+		default void onUpdatedIndexesList() {
+		}
 
-		void downloadInProgress();
+		default void downloadInProgress() {
+		}
 
-		void downloadHasFinished();
+		default void downloadingError(@NonNull String error) {
+		}
+
+		default void downloadHasFinished() {
+		}
 	}
 
 	public DownloadIndexesThread(OsmandApplication app) {
@@ -108,10 +106,25 @@ public class DownloadIndexesThread {
 	@UiThread
 	protected void downloadHasStarted() {
 		boolean shouldStartService = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || uiActivity != null;
-		if (app.getDownloadService() == null && shouldStartService) {
-			app.startDownloadService();
+		if (shouldStartService) {
+			if (app.getDownloadService() == null) {
+				startDownloadService();
+			}
+			if (uiActivity instanceof FragmentActivity) {
+				AndroidUtils.requestNotificationPermissionIfNeeded((FragmentActivity) uiActivity);
+			}
 		}
 		updateNotification();
+	}
+
+	private void startDownloadService() {
+		Intent intent = new Intent(app, DownloadService.class);
+
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+			app.startForegroundService(intent);
+		} else {
+			app.startService(intent);
+		}
 	}
 
 	@UiThread
@@ -120,6 +133,13 @@ public class DownloadIndexesThread {
 			uiActivity.downloadInProgress();
 		}
 		updateNotification();
+	}
+
+	@UiThread
+	protected void downloadingError(@NonNull String error) {
+		if (uiActivity != null) {
+			uiActivity.downloadingError(error);
+		}
 	}
 
 	@UiThread
@@ -284,12 +304,7 @@ public class DownloadIndexesThread {
 
 	public void cancelDownload(IndexItem item, boolean forceUpdateProgress) {
 		app.logMapDownloadEvent("cancel", item);
-		if (item instanceof WeatherIndexItem) {
-			cancelWeatherDownload((WeatherIndexItem) item);
-			if (forceUpdateProgress) {
-				downloadInProgress();
-			}
-		} else if (isCurrentDownloading(item)) {
+		if (isCurrentDownloading(item)) {
 			downloadFileHelper.setInterruptDownloading(true);
 		} else {
 			indexItemDownloading.remove(item);
@@ -297,14 +312,6 @@ public class DownloadIndexesThread {
 				downloadInProgress();
 			}
 		}
-	}
-
-	private void cancelWeatherDownload(@NonNull WeatherIndexItem weatherIndexItem) {
-		if (!isCurrentDownloading(weatherIndexItem)) {
-			indexItemDownloading.remove(weatherIndexItem);
-		}
-		OfflineForecastHelper helper = app.getOfflineForecastHelper();
-		helper.checkAndStopWeatherDownload(weatherIndexItem);
 	}
 
 	public boolean isCurrentDownloading(@NonNull DownloadItem downloadItem) {
@@ -387,7 +394,6 @@ public class DownloadIndexesThread {
 				while (app.isApplicationInitializing()) {
 					Thread.sleep(200);
 				}
-				PluginsHelper.addPluginIndexItems(indexFileList);
 				result = new DownloadResources(app);
 				result.isDownloadedFromInternet = indexFileList.isDownloadedFromInternet();
 				result.mapVersionIsIncreased = indexFileList.isIncreasedMapVersion();
@@ -462,8 +468,13 @@ public class DownloadIndexesThread {
 					}
 				} else if (o instanceof String) {
 					String message = (String) o;
-					if (!message.toLowerCase().contains("interrupted") && !message.equals(app.getString(R.string.shared_string_download_successful))) {
-						app.showToastMessage(message);
+					boolean success = message.equals(app.getString(R.string.shared_string_download_successful));
+					if (!success) {
+						if (!message.toLowerCase().contains("interrupted")
+								&& !message.equals(DownloadValidationManager.getFreeVersionMessage(app))) {
+							app.showToastMessage(message);
+						}
+						downloadingError(message);
 					}
 				}
 			}
@@ -535,9 +546,8 @@ public class DownloadIndexesThread {
 								File oldFile = new File(folder, fileName);
 								Algorithms.removeAllFiles(oldFile);
 							}
-							if (item.getType() == DownloadActivityType.GEOTIFF_FILE) {
-								updateHeightmap(updatingFile, item.getTargetFile(app).getAbsolutePath());
-							}
+							PluginsHelper.onIndexItemDownloaded(item, updatingFile);
+
 							File bf = item.getBackupFile(app);
 							if (bf.exists()) {
 								Algorithms.removeAllFiles(bf);
@@ -585,9 +595,7 @@ public class DownloadIndexesThread {
 					&& DownloadActivityType.isCountedInDownloads(item)
 					&& downloads.get() >= MAXIMUM_AVAILABLE_FREE_DOWNLOADS;
 			if (exceed) {
-				String breakDownloadMessage = app.getString(R.string.free_version_message,
-						MAXIMUM_AVAILABLE_FREE_DOWNLOADS + "");
-				publishProgress(breakDownloadMessage);
+				publishProgress(DownloadValidationManager.getFreeVersionMessage(app));
 			}
 			return !exceed;
 		}
@@ -604,7 +612,6 @@ public class DownloadIndexesThread {
 			List<String> warnings = new ArrayList<>();
 			manager.indexVoiceFiles(this);
 			manager.indexFontFiles(this);
-			manager.indexWeatherFiles(this);
 			if (vectorMapsToReindex) {
 				warnings = manager.indexingMaps(this, filesToReindex);
 			}
@@ -619,17 +626,6 @@ public class DownloadIndexesThread {
 			return null;
 		}
 
-		private void updateHeightmap(boolean overwriteExistingFile, @NonNull String filePath) {
-			MapRendererContext mapRendererContext = NativeCoreContext.getMapRendererContext();
-			if (mapRendererContext != null) {
-				if (overwriteExistingFile) {
-					mapRendererContext.removeCachedHeightmapTiles(filePath);
-				} else {
-					mapRendererContext.updateCachedHeightmapTiles();
-				}
-			}
-		}
-
 		@Override
 		public void showWarning(String warning) {
 			publishProgress(warning);
@@ -638,18 +634,14 @@ public class DownloadIndexesThread {
 		public boolean downloadFile(IndexItem item, List<File> filesToReindex, boolean forceWifi)
 				throws InterruptedException {
 			downloadFileHelper.setInterruptDownloading(false);
-			IndexItem.DownloadEntry de = item.createDownloadEntry(app);
+			DownloadEntry de = item.createDownloadEntry(app);
 			boolean result = false;
 			if (de == null) {
 				return false;
-			} else if (de.isWeather) {
-				OfflineForecastHelper offlineForecastHelper = app.getOfflineForecastHelper();
-				result = offlineForecastHelper.downloadForecastByRegion(de.worldRegion, this);
 			} else if (de.isAsset) {
 				try {
 					if (ctx != null) {
-						ResourceManager.copyAssets(ctx.getAssets(), de.assetName, de.targetFile);
-						boolean changedDate = de.targetFile.setLastModified(de.dateModified);
+						boolean changedDate = ResourceManager.copyAssets(ctx.getAssets(), de.assetName, de.targetFile, de.dateModified);
 						if (!changedDate) {
 							LOG.error("Set last timestamp is not supported");
 						}
@@ -665,7 +657,13 @@ public class DownloadIndexesThread {
 				long time = System.currentTimeMillis() - start;
 				if (result) {
 					app.logMapDownloadEvent("done", item, time);
-					checkDownload(item);
+					if (item.isHidden()) {
+						File nonHiddenFile = item.getDefaultTargetFile(app);
+						if (nonHiddenFile.exists()) {
+							nonHiddenFile.delete();
+						}
+					}
+					checkDownload(item, time);
 				} else {
 					app.logMapDownloadEvent("failed", item, time);
 				}
@@ -684,10 +682,14 @@ public class DownloadIndexesThread {
 		}
 	}
 
-	private void checkDownload(IndexItem item) {
+	private void checkDownload(IndexItem item, long downloadTime) {
 		Map<String, String> params = new HashMap<>();
 		params.put("file_name", item.fileName);
 		params.put("file_size", item.size);
-		AndroidNetworkUtils.sendRequestAsync(app, "https://osmand.net/api/check_download", params, "Check download", false, false, null);
+		int downloadTimeSec = (int) (downloadTime / 1000L);
+		params.put("download_time", String.valueOf(downloadTimeSec));
+
+		String url = AndroidNetworkUtils.getHttpProtocol() + "osmand.net/api/check_download";
+		AndroidNetworkUtils.sendRequestAsync(app, url, params, "Check download", false, false, null);
 	}
 }

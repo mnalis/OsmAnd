@@ -1,6 +1,6 @@
 package net.osmand.plus.plugins.externalsensors.devices.sensors.ant;
 
-import static net.osmand.plus.plugins.externalsensors.SensorAttributesUtils.SENSOR_TAG_CADENCE;
+import static net.osmand.shared.gpx.PointAttributes.SENSOR_TAG_CADENCE;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -51,7 +51,7 @@ public class AntBikeCadenceSensor extends AntAbstractSensor<AntPlusBikeCadencePc
 		@Override
 		public List<SensorDataField> getDataFields() {
 			return Collections.singletonList(
-					new BikeCadenceDataField(R.string.map_widget_ant_bicycle_cadence, -1, calculatedCadence));
+					new BikeCadenceDataField(R.string.map_widget_ant_bicycle_cadence, R.string.revolutions_per_minute_unit, calculatedCadence));
 		}
 
 		@NonNull
@@ -65,7 +65,7 @@ public class AntBikeCadenceSensor extends AntAbstractSensor<AntPlusBikeCadencePc
 		@Override
 		public List<SensorWidgetDataField> getWidgetFields() {
 			return Collections.singletonList(
-					new BikeCadenceDataField(R.string.map_widget_ant_bicycle_cadence, -1, calculatedCadence));
+					new BikeCadenceDataField(R.string.map_widget_ant_bicycle_cadence, R.string.revolutions_per_minute_unit, calculatedCadence));
 		}
 
 		@NonNull
@@ -106,10 +106,14 @@ public class AntBikeCadenceSensor extends AntAbstractSensor<AntPlusBikeCadencePc
 
 	@Override
 	public void subscribeToEvents() {
-		getAntDevice().getPcc().subscribeCalculatedCadenceEvent((estTimestamp, eventFlags, calculatedCadence) -> {
-			lastBikeCadenceData = new BikeCadenceData(estTimestamp, calculatedCadence.intValue());
-			getDevice().fireSensorDataEvent(this, lastBikeCadenceData);
-		});
+		AntPlusBikeCadencePcc pcc = getAntDevice().getPcc();
+		if (pcc != null) {
+			pcc.subscribeCalculatedCadenceEvent(null);
+			pcc.subscribeCalculatedCadenceEvent((estTimestamp, eventFlags, calculatedCadence) -> {
+				lastBikeCadenceData = new BikeCadenceData(estTimestamp, calculatedCadence.intValue());
+				getDevice().fireSensorDataEvent(this, lastBikeCadenceData);
+			});
+		}
 	}
 
 	@Override

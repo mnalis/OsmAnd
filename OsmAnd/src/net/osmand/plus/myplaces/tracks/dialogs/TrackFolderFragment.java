@@ -1,32 +1,37 @@
 package net.osmand.plus.myplaces.tracks.dialogs;
 
+import static net.osmand.plus.utils.AndroidUtils.getViewOnScreenY;
+
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.ProgressBar;
-import android.widget.TextView;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.widget.Toolbar;
-import androidx.core.view.ViewCompat;
+import androidx.appcompat.app.ActionBar;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import net.osmand.plus.R;
-import net.osmand.plus.configmap.tracks.SearchTrackItemsFragment;
-import net.osmand.plus.configmap.tracks.TrackItem;
 import net.osmand.plus.helpers.AndroidUiHelper;
+import net.osmand.plus.myplaces.MyPlacesActivity;
+import net.osmand.plus.myplaces.tracks.DialogClosedListener;
+import net.osmand.plus.myplaces.tracks.ItemsSelectionHelper;
+import net.osmand.plus.myplaces.tracks.SearchMyPlacesTracksFragment;
 import net.osmand.plus.myplaces.tracks.TrackFoldersHelper;
-import net.osmand.plus.track.data.TrackFolder;
-import net.osmand.plus.track.data.TracksGroup;
 import net.osmand.plus.utils.AndroidUtils;
-import net.osmand.plus.utils.UiUtilities;
+import net.osmand.shared.gpx.TrackItem;
+import net.osmand.shared.gpx.data.TrackFolder;
+import net.osmand.shared.gpx.data.TracksGroup;
 import net.osmand.util.Algorithms;
 
 import java.util.Collections;
@@ -36,7 +41,6 @@ public class TrackFolderFragment extends BaseTrackFolderFragment {
 
 	public static final String TAG = TrackFolderFragment.class.getSimpleName();
 
-	private TextView toolbarTitle;
 	private ProgressBar progressBar;
 
 	@Override
@@ -50,9 +54,17 @@ public class TrackFolderFragment extends BaseTrackFolderFragment {
 		return TAG;
 	}
 
+	@Nullable
+	protected TracksGroup getCurrentTrackGroup() {
+		return selectedFolder;
+	}
+
+	private boolean isLoadingItems;
+
 	@Override
 	public void onCreate(@Nullable Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		setHasOptionsMenu(true);
 		FragmentActivity activity = requireActivity();
 		activity.getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
 			@Override
@@ -67,90 +79,125 @@ public class TrackFolderFragment extends BaseTrackFolderFragment {
 	public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
 		View view = super.onCreateView(inflater, container, savedInstanceState);
 		if (view != null) {
-			setupToolbar(view);
 			setupProgressBar(view);
+			setupSwipeRefresh(view);
 		}
 		updateContent();
 		return view;
 	}
 
-	private void setupProgressBar(@NonNull View view) {
+	protected void setupProgressBar(@NonNull View view) {
 		progressBar = view.findViewById(R.id.progress_bar);
+		updateProgress();
+	}
 
+	protected void updateProgress() {
 		TrackFoldersHelper foldersHelper = getTrackFoldersHelper();
 		boolean importing = foldersHelper != null && foldersHelper.isImporting();
 		AndroidUiHelper.updateVisibility(progressBar, importing);
 	}
 
-	private void setupToolbar(@NonNull View view) {
-		Toolbar toolbar = view.findViewById(R.id.toolbar);
-		toolbarTitle = view.findViewById(R.id.toolbar_title);
-		ViewCompat.setElevation(view.findViewById(R.id.appbar), 5.0f);
-
-		ImageView closeButton = toolbar.findViewById(R.id.close_button);
-		closeButton.setImageDrawable(getIcon(AndroidUtils.getNavigationIconResId(view.getContext())));
-		closeButton.setOnClickListener(v -> onBackPressed());
-
-		ViewGroup container = view.findViewById(R.id.actions_container);
-		container.removeAllViews();
-
-		LayoutInflater inflater = UiUtilities.getInflater(view.getContext(), nightMode);
-		setupSearchButton(inflater, container);
-		setupMenuButton(inflater, container);
+	private void setupSwipeRefresh(@NonNull View view) {
+		SwipeRefreshLayout swipeRefresh = view.findViewById(R.id.swipe_refresh);
+		swipeRefresh.setColorSchemeColors(ContextCompat.getColor(app, nightMode ? R.color.osmand_orange_dark : R.color.osmand_orange));
+		swipeRefresh.setOnRefreshListener(() -> {
+			reloadTracks(true);
+			swipeRefresh.setRefreshing(false);
+		});
 	}
 
-	private void setupSearchButton(@NonNull LayoutInflater inflater, @NonNull ViewGroup container) {
-		ImageButton button = (ImageButton) inflater.inflate(R.layout.action_button, container, false);
-		button.setImageDrawable(getIcon(R.drawable.ic_action_search_dark));
-		button.setOnClickListener(v -> {
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) {
+		int itemId = item.getItemId();
+		if (itemId == R.id.action_folder_search) {
 			FragmentActivity activity = getActivity();
 			if (activity != null) {
-				SearchTrackItemsFragment.showInstance(activity.getSupportFragmentManager(), getTargetFragment(), false);
+				TracksGroup group = getCurrentTrackGroup();
+				TrackFolder currentFolder = group instanceof TrackFolder ? (TrackFolder) group : null;
+				FragmentManager manager = activity.getSupportFragmentManager();
+				SearchMyPlacesTracksFragment.showInstance(manager,
+						getTargetFragment(),
+						false,
+						isUsedOnMap(),
+						null,
+						null,
+						new DialogClosedListener() {
+							@Override
+							public void onDialogClosed() {
+								updateContent();
+							}
+						},
+						currentFolder);
+				return true;
 			}
-		});
-		button.setContentDescription(getString(R.string.shared_string_search));
-		container.addView(button);
+		} else if (itemId == R.id.action_folder_menu) {
+			return showFolderOptionMenu();
+		}
+		return false;
 	}
 
-	private void setupMenuButton(@NonNull LayoutInflater inflater, @NonNull ViewGroup container) {
-		ImageButton button = (ImageButton) inflater.inflate(R.layout.action_button, container, false);
-		button.setImageDrawable(getIcon(R.drawable.ic_overflow_menu_white));
-		button.setOnClickListener(v -> {
-			TrackFoldersHelper foldersHelper = getTrackFoldersHelper();
-			if (foldersHelper != null) {
-				foldersHelper.showFolderOptionsMenu(selectedFolder, v, this);
-			}
-		});
-		button.setContentDescription(getString(R.string.shared_string_more));
-		container.addView(button);
+	protected boolean showFolderOptionMenu() {
+		FragmentActivity activity = getActivity();
+		TrackFoldersHelper foldersHelper = getTrackFoldersHelper();
+		if (foldersHelper != null && activity != null) {
+			View view = activity.findViewById(R.id.action_folder_menu);
+			foldersHelper.showFolderOptionsMenu(selectedFolder, view, this, isRootFolder());
+			return true;
+		}
+		return false;
 	}
 
-	private void onBackPressed() {
-		if (rootFolder.equals(selectedFolder)) {
+	@Override
+	public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
+		menu.clear();
+		inflater.inflate(R.menu.myplaces_tracks_folder_menu, menu);
+		requireMyActivity().setToolbarVisibility(false);
+	}
+
+	protected void onBackPressed() {
+		if (isRootFolder()) {
 			dismiss();
+			updateTitle();
 		} else {
 			selectedFolder = selectedFolder.getParentFolder();
 			updateContent();
 		}
 	}
 
+	private boolean isRootFolder() {
+		return Algorithms.objectEquals(rootFolder, selectedFolder);
+	}
+
 	@Override
 	public void updateContent() {
 		super.updateContent();
-		toolbarTitle.setText(selectedFolder.getName(app));
+		updateTitle();
+	}
+
+	private void updateTitle() {
+		TracksGroup group = getCurrentTrackGroup();
+		MyPlacesActivity activity = getMyActivity();
+		ActionBar actionBar = activity != null ? activity.getSupportActionBar() : null;
+		if (actionBar != null && group != null) {
+			actionBar.setTitle(group.getName());
+		}
 	}
 
 	@Override
 	public void onResume() {
 		super.onResume();
-		updateActionBar(false);
+		updateProgress();
 		restoreState(getArguments());
 	}
 
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
-		updateActionBar(true);
+
+		MyPlacesActivity activity = getMyActivity();
+		if (activity != null) {
+			activity.updateToolbar();
+		}
 	}
 
 	@Override
@@ -173,20 +220,28 @@ public class TrackFolderFragment extends BaseTrackFolderFragment {
 
 	@Override
 	public void onTrackItemLongClick(@NonNull View view, @NonNull TrackItem trackItem) {
-		showTracksSelection(trackItem, null);
+		ScreenPositionData positionData = new ScreenPositionData(trackItem, getViewOnScreenY(view));
+		showTracksSelection(trackItem, null, positionData);
 	}
 
 	@Override
 	public void onTracksGroupLongClick(@NonNull View view, @NonNull TracksGroup group) {
-		showTracksSelection(null, group);
+		ScreenPositionData positionData = new ScreenPositionData(group, getViewOnScreenY(view));
+		showTracksSelection(null, group, positionData);
 	}
 
-	private void showTracksSelection(@Nullable TrackItem trackItem, @Nullable TracksGroup tracksGroup) {
+	private void showTracksSelection(@Nullable TrackItem trackItem, @Nullable TracksGroup tracksGroup,
+	                                 @Nullable ScreenPositionData screenPositionData) {
 		TrackFoldersHelper foldersHelper = getTrackFoldersHelper();
 		if (foldersHelper != null) {
-			Set<TrackItem> trackItems = trackItem != null ? Collections.singleton(trackItem) : null;
-			Set<TracksGroup> tracksGroups = tracksGroup != null ? Collections.singleton(tracksGroup) : null;
-			foldersHelper.showTracksSelection(selectedFolder, this, trackItems, tracksGroups);
+			if (selectedFolder != null) {
+				Set<TrackItem> trackItems = trackItem != null ? Collections.singleton(trackItem) : null;
+				Set<TracksGroup> tracksGroups = tracksGroup != null ? Collections.singleton(tracksGroup) : null;
+				foldersHelper.showTracksSelection(selectedFolder, this, trackItems, tracksGroups, screenPositionData);
+			} else if (smartFolder != null) {
+				Set<TrackItem> trackItems = trackItem != null ? Collections.singleton(trackItem) : null;
+				foldersHelper.showTracksSelection(smartFolder, this, trackItems, null, screenPositionData);
+			}
 		}
 	}
 
@@ -202,7 +257,7 @@ public class TrackFolderFragment extends BaseTrackFolderFragment {
 	public void restoreState(Bundle bundle) {
 		super.restoreState(bundle);
 
-		if (!Algorithms.isEmpty(selectedItemPath)) {
+		if (rootFolder != null && !Algorithms.isEmpty(selectedItemPath)) {
 			TrackItem trackItem = geTrackItem(rootFolder, selectedItemPath);
 			if (trackItem != null) {
 				int index = adapter.getItemPosition(trackItem);
@@ -212,6 +267,32 @@ public class TrackFolderFragment extends BaseTrackFolderFragment {
 			}
 			selectedItemPath = null;
 		}
+	}
+
+	@NonNull
+	@Override
+	public ItemsSelectionHelper<TrackItem> getSelectionHelper() {
+		ItemsSelectionHelper<TrackItem> selectionHelper = new ItemsSelectionHelper<>();
+		selectionHelper.setAllItems(selectedFolder.getFlattenedTrackItems());
+		selectionHelper.setSelectedItems(selectedFolder.getFlattenedTrackItems());
+		selectionHelper.setOriginalSelectedItems(selectedFolder.getFlattenedTrackItems());
+		return selectionHelper;
+	}
+
+	@Override
+	protected Object getEmptyItem() {
+		Object emptyItem;
+		if (isLoadingItems) {
+			emptyItem = smartFolder == null ? TrackFoldersAdapter.TYPE_EMPTY_FOLDER_LOADING : TrackFoldersAdapter.TYPE_EMPTY_SMART_FOLDER_LOADING;
+		} else {
+			emptyItem = smartFolder == null ? TrackFoldersAdapter.TYPE_EMPTY_FOLDER : TrackFoldersAdapter.TYPE_EMPTY_SMART_FOLDER;
+		}
+		return emptyItem;
+	}
+
+	public void setLoadingItems(boolean isLoadingItems) {
+		this.isLoadingItems = isLoadingItems;
+		updateContent();
 	}
 
 	public static void showInstance(@NonNull FragmentManager manager, @NonNull TrackFolder folder, @Nullable Fragment target) {

@@ -2,9 +2,9 @@ package net.osmand.router;
 
 import net.osmand.util.Algorithms;
 
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 
-import gnu.trove.set.hash.TIntHashSet;
 
 public class TurnType {
 	public static final int C = 1;//"C"; // continue (go straight) //$NON-NLS-1$
@@ -28,15 +28,15 @@ public class TurnType {
 	}
 	
 	public int getActiveCommonLaneTurn() {
-		if(lanes == null || lanes.length == 0) {
-			return C;
+		if (lanes == null || lanes.length == 0) {
+			return -1;
 		}
-		for(int i = 0; i < lanes.length; i++) {
-			if(lanes[i] % 2 == 1) {
+		for (int i = 0; i < lanes.length; i++) {
+			if (lanes[i] % 2 == 1) {
 				return TurnType.getPrimaryTurn(lanes[i]);
 			}
 		}
-		return C;
+		return -1;
 	}
 	
 	public String toXmlString() {
@@ -102,7 +102,8 @@ public class TurnType {
 		} else if (s != null && (s.startsWith("EXIT") ||
 				s.startsWith("RNDB") || s.startsWith("RNLB"))) {
 			try {
-				t = TurnType.getExitTurn(Integer.parseInt(s.substring(4)), 0, leftSide);
+				int type = s.contains("RNLB") ? RNLB : RNDB;
+				t = TurnType.getExitTurn(type, Integer.parseInt(s.substring(4)), 0, leftSide);
 			} catch (NumberFormatException e) {
 				e.printStackTrace();
 			}
@@ -150,6 +151,16 @@ public class TurnType {
 
 	public static TurnType getExitTurn(int out, float angle, boolean leftSide) {
 		TurnType r = valueOf(RNDB, leftSide); //$NON-NLS-1$
+		r.exitOut = out;
+		r.setTurnAngle(angle);
+		return r;
+	}
+
+	private static TurnType getExitTurn(int type, int out, float angle, boolean leftSide) {
+		if (type != RNDB && type != RNLB) {
+			return getExitTurn(out, angle, leftSide);
+		}
+		TurnType r = valueOf(type, leftSide); //$NON-NLS-1$
 		r.exitOut = out;
 		r.setTurnAngle(angle);
 		return r;
@@ -319,6 +330,26 @@ public class TurnType {
 		return cnt;
 	}
 
+	public int countDirections() {
+		HashSet<Integer> directions = new HashSet<>();
+		for (int h = 0; h < lanes.length; h++) {
+			int primary = TurnType.getPrimaryTurn(lanes[h]);
+			if (primary == 0) {
+				primary = TurnType.C;
+			}
+			directions.add(primary);
+			int secondary = TurnType.getSecondaryTurn(lanes[h]);
+			if (secondary > 0) {
+				directions.add(secondary);
+			}
+			int tertiary = TurnType.getTertiaryTurn(lanes[h]);
+			if (tertiary > 0) {
+				directions.add(tertiary);
+			}
+		}
+		return directions.size();
+	}
+
 	public static int[] lanesFromString(String lanesString) {
 		if (Algorithms.isEmpty(lanesString)) {
 			return null;
@@ -431,7 +462,7 @@ public class TurnType {
 			vl = "Off route";
 		}
 		if(vl != null) {
-			if(lanes != null) {
+			if (lanes != null && lanes.length > 0) {
 				vl += " (" + lanesToString(lanes) +")";
 			}
 			return vl;
@@ -562,74 +593,6 @@ public class TurnType {
 		return turn;
 	}
 
-	public static String convertLanesToOsmString(int[] lns, boolean onlyActive, boolean withCombine) {
-		if (lns != null && lns.length > 0) {
-			StringBuilder s = new StringBuilder();
-			int cnt = 0;
-			for (int h = 0; h < lns.length; h++) {
-				if (onlyActive && lns[h] % 2 == 0) {
-					continue;
-				}
-				int pt = TurnType.getPrimaryTurn(lns[h]);
-				if (pt == 0) {
-					pt = 1;
-				}
-				String primary = TurnType.valueOf(pt, false).toOsmString();
-				if (primary == null) {
-					// something wrong
-					return null;
-				}
-				if (cnt > 0) {
-					s.append("|");
-				}
-				s.append(primary);
-				if (withCombine) {
-					int st = TurnType.getSecondaryTurn(lns[h]);
-					int tt = TurnType.getTertiaryTurn(lns[h]);
-					if (st != 0) {
-						s.append(";").append(TurnType.valueOf(st, false).toOsmString());
-					}
-					if (tt != 0) {
-						s.append(";").append(TurnType.valueOf(tt, false).toOsmString());
-					}
-				}
-				cnt++;
-			}
-			String result = s.toString();
-			if (!result.isEmpty()) {
-				return result;
-			}
-		}
-		return null;
-	}
-
-	private String toOsmString() {
-		switch (value) {
-			case KL:
-			case KR:
-			case C:
-				return "through";
-			case TL:
-				return "left";
-			case TSLL:
-				return "slight_left";
-			case TSHL:
-				return "sharp_left";
-			case TR:
-				return "right";
-			case TSLR:
-				return "slight_right";
-			case TSHR:
-				return "sharp_right";
-			case TU:
-			case TRU:
-				return "reverse";
-			default:
-				return null;
-		}
-	}
-
-	
 	public static int getPrev(int turn) {
 		for (int i = TURNS_ORDER.length - 1; i >= 0; i--) {
 			int t = TURNS_ORDER[i];

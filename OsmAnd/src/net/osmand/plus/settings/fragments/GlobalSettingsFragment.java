@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
 import androidx.fragment.app.FragmentManager;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
@@ -20,9 +21,9 @@ import net.osmand.plus.R;
 import net.osmand.plus.activities.RestartActivity;
 import net.osmand.plus.dialogs.LocationSourceBottomSheet;
 import net.osmand.plus.dialogs.MapRenderingEngineDialog;
-import net.osmand.plus.dialogs.SendAnalyticsBottomSheetDialogFragment;
-import net.osmand.plus.dialogs.SendAnalyticsBottomSheetDialogFragment.OnSendAnalyticsPrefsUpdate;
 import net.osmand.plus.dialogs.SpeedCamerasBottomSheet;
+import net.osmand.plus.feedback.SendAnalyticsBottomSheetDialogFragment;
+import net.osmand.plus.feedback.SendAnalyticsBottomSheetDialogFragment.OnSendAnalyticsPrefsUpdate;
 import net.osmand.plus.helpers.LocaleHelper;
 import net.osmand.plus.profiles.SelectDefaultProfileBottomSheet;
 import net.osmand.plus.profiles.SelectProfileBottomSheet.OnSelectProfileCallback;
@@ -81,7 +82,7 @@ public class GlobalSettingsFragment extends BaseSettingsFragment
 	}
 
 	@Override
-	protected void onBindPreferenceViewHolder(Preference preference, PreferenceViewHolder holder) {
+	protected void onBindPreferenceViewHolder(@NonNull Preference preference, @NonNull PreferenceViewHolder holder) {
 		super.onBindPreferenceViewHolder(preference, holder);
 
 		String prefId = preference.getKey();
@@ -143,7 +144,7 @@ public class GlobalSettingsFragment extends BaseSettingsFragment
 	}
 
 	@Override
-	public void onPreferenceChanged(String prefId) {
+	public void onPreferenceChanged(@NonNull String prefId) {
 		if (prefId.equals(settings.PREFERRED_LOCALE.getId())) {
 			// recreate activity to update locale
 			Activity activity = getActivity();
@@ -230,12 +231,13 @@ public class GlobalSettingsFragment extends BaseSettingsFragment
 	}
 
 	private void setupExternalStorageDirPref() {
-		Preference externalStorageDir = findPreference(OsmandSettings.EXTERNAL_STORAGE_DIR);
-		externalStorageDir.setIcon(getContentIcon(R.drawable.ic_action_folder));
+		Preference preference = findPreference(OsmandSettings.EXTERNAL_STORAGE_DIR);
+		preference.setIcon(getContentIcon(R.drawable.ic_action_folder));
 
-		DataStorageHelper holder = new DataStorageHelper(app);
-		StorageItem currentStorage = holder.getCurrentStorage();
-		long totalUsed = app.getSettings().OSMAND_USAGE_SPACE.get();
+		DataStorageHelper storageHelper = new DataStorageHelper(app);
+		StorageItem currentStorage = storageHelper.getCurrentStorage();
+
+		long totalUsed = settings.OSMAND_USAGE_SPACE.get();
 		if (totalUsed > 0) {
 			String[] usedMemoryFormats = {
 					getString(R.string.shared_string_memory_used_kb_desc),
@@ -243,14 +245,11 @@ public class GlobalSettingsFragment extends BaseSettingsFragment
 					getString(R.string.shared_string_memory_used_gb_desc),
 					getString(R.string.shared_string_memory_used_tb_desc)
 			};
-			String sTotalUsed = DataStorageHelper.getFormattedMemoryInfo(totalUsed, usedMemoryFormats);
-			String summary = String.format(getString(R.string.data_storage_preference_summary),
-					currentStorage.getTitle(),
-					sTotalUsed);
-			summary = summary.replaceAll(" • ", "  •  ");
-			externalStorageDir.setSummary(summary);
+			String usedSpace = DataStorageHelper.getFormattedMemoryInfo(totalUsed, usedMemoryFormats);
+			String summary = getString(R.string.data_storage_preference_summary, currentStorage.getTitle(), usedSpace);
+			preference.setSummary(summary.replaceAll(" • ", "  •  "));
 		} else {
-			externalStorageDir.setSummary(currentStorage.getTitle());
+			preference.setSummary(currentStorage.getTitle());
 		}
 	}
 

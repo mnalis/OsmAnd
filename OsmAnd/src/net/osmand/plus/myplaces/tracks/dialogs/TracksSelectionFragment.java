@@ -1,61 +1,75 @@
 package net.osmand.plus.myplaces.tracks.dialogs;
 
+import static net.osmand.plus.myplaces.tracks.dialogs.TrackFoldersAdapter.TYPE_EMPTY_FOLDER;
+import static net.osmand.plus.myplaces.tracks.dialogs.TrackFoldersAdapter.TYPE_SORT_TRACKS;
+
+import android.graphics.drawable.ColorDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageButton;
-import android.widget.ImageView;
-import android.widget.TextView;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.ColorRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.widget.Toolbar;
-import androidx.core.view.ViewCompat;
+import androidx.appcompat.app.ActionBar;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
+import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 
 import net.osmand.plus.R;
-import net.osmand.plus.configmap.tracks.TrackItem;
+import net.osmand.shared.gpx.TrackItem;
 import net.osmand.plus.helpers.AndroidUiHelper;
+import net.osmand.plus.myplaces.MyPlacesActivity;
 import net.osmand.plus.myplaces.tracks.ItemsSelectionHelper;
-import net.osmand.plus.myplaces.tracks.ItemsSelectionHelper.SelectionHelperProvider;
 import net.osmand.plus.myplaces.tracks.TrackFoldersHelper;
 import net.osmand.plus.plugins.osmedit.asynctasks.UploadGPXFilesTask.UploadGpxListener;
-import net.osmand.plus.track.data.TrackFolder;
-import net.osmand.plus.track.data.TracksGroup;
+import net.osmand.shared.gpx.data.SmartFolder;
+import net.osmand.shared.gpx.data.TrackFolder;
+import net.osmand.shared.gpx.data.TracksGroup;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.ColorUtilities;
-import net.osmand.plus.utils.UiUtilities;
 import net.osmand.util.Algorithms;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 
-public class TracksSelectionFragment extends BaseTrackFolderFragment implements UploadGpxListener, SelectionHelperProvider<TrackItem> {
+public class TracksSelectionFragment extends BaseTrackFolderFragment implements UploadGpxListener {
 
 	public static final String TAG = TracksSelectionFragment.class.getSimpleName();
 
 	private ItemsSelectionHelper<TrackItem> itemsSelectionHelper = new ItemsSelectionHelper<>();
 	private ItemsSelectionHelper<TracksGroup> groupsSelectionHelper = new ItemsSelectionHelper<>();
 
-	private TextView toolbarTitle;
-	private ImageButton selectionButton;
-
 	@Nullable
 	private Set<TrackItem> preselectedTrackItems;
 	@Nullable
 	private Set<TracksGroup> preselectedTracksGroups;
+	@Nullable
+	private ScreenPositionData screenPositionData;
+	private boolean scrollPositionApplied;
+	@Nullable
+	private MenuItem selectionItem;
 
 	@Override
 	@ColorRes
 	public int getStatusBarColorId() {
 		AndroidUiHelper.setStatusBarContentColor(getView(), nightMode);
 		return ColorUtilities.getStatusBarActiveColorId(nightMode);
+	}
+
+	public boolean getContentStatusBarNightMode() {
+		return nightMode;
 	}
 
 	@NonNull
@@ -72,6 +86,7 @@ public class TracksSelectionFragment extends BaseTrackFolderFragment implements 
 	@Override
 	public void onCreate(@Nullable Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		setHasOptionsMenu(true);
 		FragmentActivity activity = requireActivity();
 		activity.getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
 			@Override
@@ -82,14 +97,19 @@ public class TracksSelectionFragment extends BaseTrackFolderFragment implements 
 	}
 
 	@Override
-	public void setRootFolder(@NonNull TrackFolder rootFolder) {
-		super.setRootFolder(rootFolder);
+	public void setRootFolder(@NonNull TracksGroup rootFolder) {
+		if (rootFolder instanceof SmartFolder) {
+			setSmartFolder((SmartFolder) rootFolder);
+		} else {
+			super.setRootFolder(rootFolder);
+		}
 		itemsSelectionHelper.clearSelectedItems();
 		groupsSelectionHelper.clearSelectedItems();
 
 		itemsSelectionHelper.setAllItems(rootFolder.getTrackItems());
-		groupsSelectionHelper.setAllItems(rootFolder.getSubFolders());
-
+		if (rootFolder instanceof TrackFolder) {
+			groupsSelectionHelper.setAllItems(((TrackFolder) rootFolder).getSubFolders());
+		}
 		if (!Algorithms.isEmpty(preselectedTrackItems)) {
 			itemsSelectionHelper.setSelectedItems(preselectedTrackItems);
 		}
@@ -102,12 +122,35 @@ public class TracksSelectionFragment extends BaseTrackFolderFragment implements 
 	@Override
 	public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
 		View view = super.onCreateView(inflater, container, savedInstanceState);
-		if (view != null) {
-			setupToolbar(view);
-		}
+
+		setupToolbar();
 		updateContent();
 		updateSelection();
+		applyScrollPosition();
+
 		return view;
+	}
+
+	@NonNull
+	@Override
+	protected List<Object> getAdapterItems() {
+		if (rootFolder == null) {
+			List<Object> items = new ArrayList<>();
+			items.add(TYPE_SORT_TRACKS);
+
+			Set<TrackItem> trackItems = itemsSelectionHelper.getAllItems();
+
+			if (trackItems.isEmpty()) {
+				items.add(TYPE_EMPTY_FOLDER);
+			} else {
+				items.addAll(trackItems);
+				if (shouldShowFolderStats()) {
+					items.add(selectedFolder.getFolderAnalysis());
+				}
+			}
+			return items;
+		}
+		return super.getAdapterItems();
 	}
 
 	@Override
@@ -117,32 +160,27 @@ public class TracksSelectionFragment extends BaseTrackFolderFragment implements 
 		adapter.setShouldShowFolder(true);
 	}
 
-	private void setupToolbar(@NonNull View view) {
-		Toolbar toolbar = view.findViewById(R.id.toolbar);
-		toolbar.setBackgroundColor(ColorUtilities.getToolbarActiveColor(app, nightMode));
-		ViewCompat.setElevation(view.findViewById(R.id.appbar), 5.0f);
-
-		toolbarTitle = toolbar.findViewById(R.id.toolbar_title);
-
-		ImageView closeButton = toolbar.findViewById(R.id.close_button);
-		closeButton.setImageDrawable(getIcon(R.drawable.ic_action_close));
-		closeButton.setOnClickListener(v -> dismiss());
-
-		setupToolbarActions(view);
+	private void setupToolbar() {
+		MyPlacesActivity activity = getMyActivity();
+		ActionBar actionBar = activity != null ? activity.getSupportActionBar() : null;
+		if (actionBar != null) {
+			actionBar.setHomeAsUpIndicator(R.drawable.ic_action_close);
+			actionBar.setBackgroundDrawable(new ColorDrawable(ColorUtilities.getToolbarActiveColor(app, nightMode)));
+		}
+		updateSelection();
 	}
 
-	private void setupToolbarActions(@NonNull View view) {
-		ViewGroup container = view.findViewById(R.id.actions_container);
-		container.removeAllViews();
-
-		LayoutInflater inflater = UiUtilities.getInflater(view.getContext(), nightMode);
-		setupSelectionButton(inflater, container);
-		setupMenuButton(inflater, container);
+	@Override
+	public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
+		menu.clear();
+		inflater.inflate(R.menu.myplaces_selection_menu, menu);
+		selectionItem = menu.findItem(R.id.action_select);
 	}
 
-	private void setupSelectionButton(@NonNull LayoutInflater inflater, @NonNull ViewGroup container) {
-		selectionButton = (ImageButton) inflater.inflate(R.layout.action_button, container, false);
-		selectionButton.setOnClickListener(v -> {
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) {
+		int itemId = item.getItemId();
+		if (itemId == R.id.action_select) {
 			if (isAllItemsSelected()) {
 				itemsSelectionHelper.clearSelectedItems();
 				groupsSelectionHelper.clearSelectedItems();
@@ -152,24 +190,19 @@ public class TracksSelectionFragment extends BaseTrackFolderFragment implements 
 			}
 			updateSelection();
 			adapter.notifyDataSetChanged();
-		});
-		updateSelection();
-		container.addView(selectionButton);
-	}
-
-	private void setupMenuButton(@NonNull LayoutInflater inflater, @NonNull ViewGroup container) {
-		ImageButton button = (ImageButton) inflater.inflate(R.layout.action_button, container, false);
-		button.setImageDrawable(getIcon(R.drawable.ic_overflow_menu_white));
-		button.setOnClickListener(v -> {
+			return true;
+		} else if (itemId == R.id.action_overflow_menu) {
+			MyPlacesActivity activity = getMyActivity();
 			TrackFoldersHelper foldersHelper = getTrackFoldersHelper();
-			if (foldersHelper != null) {
+			if (foldersHelper != null && activity != null) {
+				View view = activity.findViewById(R.id.action_overflow_menu);
 				Set<TrackItem> trackItems = itemsSelectionHelper.getSelectedItems();
 				Set<TracksGroup> tracksGroups = groupsSelectionHelper.getSelectedItems();
-				foldersHelper.showItemsOptionsMenu(trackItems, tracksGroups, v, this);
+				foldersHelper.showItemsOptionsMenu(view, rootFolder, trackItems, tracksGroups, this, this, isNightMode());
+				return true;
 			}
-		});
-		button.setContentDescription(getString(R.string.shared_string_more));
-		container.addView(button);
+		}
+		return false;
 	}
 
 	private boolean isAllItemsSelected() {
@@ -178,10 +211,16 @@ public class TracksSelectionFragment extends BaseTrackFolderFragment implements 
 
 	private void updateSelection() {
 		updateToolbar();
-		boolean selected = isAllItemsSelected();
-		int iconId = selected ? R.drawable.ic_action_deselect_all : R.drawable.ic_action_select_all;
-		selectionButton.setImageDrawable(getIcon(iconId));
-		selectionButton.setContentDescription(getString(selected ? R.string.shared_string_deselect_all : R.string.shared_string_select_all));
+
+		if (selectionItem != null) {
+			boolean selected = isAllItemsSelected();
+			selectionItem.setTitle(selected ? R.string.shared_string_deselect_all : R.string.shared_string_select_all);
+			selectionItem.setIcon(getIcon(selected ? R.drawable.ic_action_deselect_all : R.drawable.ic_action_select_all));
+
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+				selectionItem.setContentDescription(getString(selected ? R.string.shared_string_deselect_all : R.string.shared_string_select_all));
+			}
+		}
 	}
 
 	@Override
@@ -191,25 +230,77 @@ public class TracksSelectionFragment extends BaseTrackFolderFragment implements 
 	}
 
 	private void updateToolbar() {
-		int selectedTracks = itemsSelectionHelper.getSelectedItemsSize();
-		int selectedGroups = groupsSelectionHelper.getSelectedItemsSize();
-		toolbarTitle.setText(String.valueOf(selectedTracks + selectedGroups));
+		MyPlacesActivity activity = getMyActivity();
+		ActionBar actionBar = activity != null ? activity.getSupportActionBar() : null;
+		if (actionBar != null) {
+			Set<TrackItem> tracks = itemsSelectionHelper.getSelectedItems();
+			Set<TracksGroup> groups = groupsSelectionHelper.getSelectedItems();
+			int items = tracks.size() + groups.size();
+			int total = tracks.size();
+			for (TracksGroup group : groups) {
+				if (group instanceof TrackFolder) {
+					total += ((TrackFolder) group).getFlattenedTrackItems().size();
+				} else {
+					total += group.getTrackItems().size();
+				}
+			}
+			String text = getResources().getQuantityString(R.plurals.tracks, total, items, total);
+			actionBar.setTitle(text);
+		}
+	}
+
+	private void applyScrollPosition() {
+		if (screenPositionData == null || scrollPositionApplied) {
+			return;
+		}
+		recyclerView.post(() -> {
+			int position = adapter.getItemPosition(screenPositionData.getReferenceObject());
+			recyclerView.scrollToPosition(position);
+
+			app.runInUIThread(() -> {
+				ViewHolder viewHolder = recyclerView.findViewHolderForAdapterPosition(position);
+				View view = viewHolder != null ? viewHolder.itemView : null;
+				if (view != null) {
+					int previousItemY = screenPositionData.getReferenceItemOnScreenY();
+					int currentItemY = AndroidUtils.getViewOnScreenY(view);
+					int correction = currentItemY - previousItemY;
+					recyclerView.scrollBy(0, correction);
+					scrollPositionApplied = true;
+				}
+			});
+		});
 	}
 
 	@Override
-	public void onResume() {
-		super.onResume();
-		updateActionBar(false);
+	public void onDestroy() {
+		super.onDestroy();
+		updateActivityTitle();
+	}
+
+	private void updateActivityTitle() {
+		Fragment targetFragment = getTargetFragment();
+		if (targetFragment instanceof AvailableTracksFragment) {
+			MyPlacesActivity activity = getMyActivity();
+			if (activity != null) {
+				activity.updateToolbar();
+			}
+		}
 	}
 
 	@Override
-	public void onPause() {
-		super.onPause();
-		updateActionBar(true);
+	public void onDestroyView() {
+		MyPlacesActivity activity = getMyActivity();
+		ActionBar actionBar = activity != null ? activity.getSupportActionBar() : null;
+		if (actionBar != null) {
+			int colorId = ColorUtilities.getActiveButtonsAndLinksTextColorId(nightMode);
+			actionBar.setHomeAsUpIndicator(getIcon(AndroidUtils.getNavigationIconResId(app), colorId));
+			actionBar.setBackgroundDrawable(new ColorDrawable(ContextCompat.getColor(app, ColorUtilities.getAppBarColorId(nightMode))));
+		}
+		super.onDestroyView();
 	}
 
 	private void onBackPressed() {
-		if (rootFolder.equals(selectedFolder)) {
+		if (rootFolder == null || rootFolder.equals(selectedFolder)) {
 			dismiss();
 		} else {
 			selectedFolder = selectedFolder.getParentFolder();
@@ -280,16 +371,21 @@ public class TracksSelectionFragment extends BaseTrackFolderFragment implements 
 		return selectionHelper;
 	}
 
-	public static void showInstance(@NonNull FragmentManager manager, @NonNull TrackFolder trackFolder,
-	                                @Nullable Fragment target, @Nullable Set<TrackItem> trackItems,
-	                                @Nullable Set<TracksGroup> tracksGroups) {
+	public static void showInstance(
+			@NonNull FragmentManager manager, @NonNull TracksGroup trackFolder, @Nullable Fragment target,
+			@Nullable Set<TrackItem> trackItems, @Nullable Set<TracksGroup> tracksGroups,
+			@Nullable ScreenPositionData screenPositionData
+	) {
 		if (AndroidUtils.isFragmentCanBeAdded(manager, TAG)) {
 			TracksSelectionFragment fragment = new TracksSelectionFragment();
 			fragment.preselectedTrackItems = trackItems;
 			fragment.preselectedTracksGroups = tracksGroups;
+			fragment.screenPositionData = screenPositionData;
 			fragment.setRetainInstance(true);
 			fragment.setRootFolder(trackFolder);
-			fragment.setSelectedFolder(trackFolder);
+			if (trackFolder instanceof TrackFolder) {
+				fragment.setSelectedFolder((TrackFolder) trackFolder);
+			}
 			fragment.setTargetFragment(target, 0);
 
 			manager.beginTransaction()

@@ -228,7 +228,7 @@ public class AccessibilitySettingsFragment extends BaseSettingsFragment implemen
 	}
 
 	@Override
-	protected void onBindPreferenceViewHolder(Preference preference, PreferenceViewHolder holder) {
+	protected void onBindPreferenceViewHolder(@NonNull Preference preference, @NonNull PreferenceViewHolder holder) {
 		super.onBindPreferenceViewHolder(preference, holder);
 		String prefId = preference.getKey();
 		if (ACCESSIBILITY_OPTIONS.equals(prefId)) {
@@ -243,7 +243,7 @@ public class AccessibilitySettingsFragment extends BaseSettingsFragment implemen
 	}
 
 	@Override
-	public void onPreferenceChanged(String prefId) {
+	public void onPreferenceChanged(@NonNull String prefId) {
 		if (settings.ACCESSIBILITY_MODE.getId().equals(prefId)) {
 			updateAllSettings();
 		}

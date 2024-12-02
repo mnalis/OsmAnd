@@ -1,6 +1,6 @@
 package net.osmand.plus.measurementtool;
 
-import static net.osmand.plus.measurementtool.SelectFileBottomSheet.Mode.OPEN_TRACK;
+import static net.osmand.plus.importfiles.OnSuccessfulGpxImport.OPEN_PLAN_ROUTE_FRAGMENT;
 import static net.osmand.plus.track.helpers.GpxUiHelper.getSortedGPXFilesInfo;
 
 import android.app.Activity;
@@ -15,6 +15,7 @@ import androidx.fragment.app.FragmentManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import net.osmand.CallbackWithObject;
 import net.osmand.IndexConstants;
 import net.osmand.PlatformUtil;
 import net.osmand.plus.OsmandApplication;
@@ -25,10 +26,10 @@ import net.osmand.plus.base.bottomsheetmenu.BaseBottomSheetItem;
 import net.osmand.plus.base.bottomsheetmenu.BottomSheetItemWithDescription;
 import net.osmand.plus.base.bottomsheetmenu.simpleitems.DividerItem;
 import net.osmand.plus.base.bottomsheetmenu.simpleitems.TitleItem;
+import net.osmand.plus.importfiles.GpxImportListener;
 import net.osmand.plus.importfiles.ImportHelper;
-import net.osmand.plus.importfiles.ImportHelper.GpxImportListener;
-import net.osmand.plus.measurementtool.SelectFileBottomSheet.SelectFileListener;
 import net.osmand.plus.track.GpxTrackAdapter;
+import net.osmand.plus.track.SelectTrackTabsFragment;
 import net.osmand.plus.track.data.GPXInfo;
 import net.osmand.plus.utils.AndroidUtils;
 
@@ -38,7 +39,7 @@ import java.io.File;
 import java.util.Collections;
 import java.util.List;
 
-public class StartPlanRouteBottomSheet extends BottomSheetBehaviourDialogFragment {
+public class StartPlanRouteBottomSheet extends BottomSheetBehaviourDialogFragment implements CallbackWithObject<String> {
 
 	public static final String TAG = StartPlanRouteBottomSheet.class.getSimpleName();
 	private static final Log LOG = PlatformUtil.getLog(StartPlanRouteBottomSheet.class);
@@ -51,7 +52,11 @@ public class StartPlanRouteBottomSheet extends BottomSheetBehaviourDialogFragmen
 
 	@Override
 	public void createMenuItems(Bundle savedInstanceState) {
-		importHelper = new ImportHelper(requireActivity());
+		OsmandApplication app = getMyApplication();
+		if (app == null) {
+			return;
+		}
+		importHelper = app.getImportHelper();
 		int themeRes = nightMode ? R.style.OsmandDarkTheme : R.style.OsmandLightTheme;
 		mainView = View.inflate(new ContextThemeWrapper(getContext(), themeRes),
 				R.layout.bottom_sheet_plan_route_start, null);
@@ -80,8 +85,7 @@ public class StartPlanRouteBottomSheet extends BottomSheetBehaviourDialogFragmen
 					MapActivity mapActivity = (MapActivity) getActivity();
 					if (mapActivity != null) {
 						hideBottomSheet();
-						SelectFileBottomSheet.showInstance(mapActivity.getSupportFragmentManager(),
-								createSelectFileListener(), OPEN_TRACK);
+						SelectTrackTabsFragment.showInstance(mapActivity.getSupportFragmentManager(), this);
 					}
 				})
 				.create();
@@ -99,10 +103,6 @@ public class StartPlanRouteBottomSheet extends BottomSheetBehaviourDialogFragmen
 
 		RecyclerView recyclerView = mainView.findViewById(R.id.gpx_track_list);
 		recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-		OsmandApplication app = getMyApplication();
-		if (app == null) {
-			return;
-		}
 
 		File gpxDir = app.getAppPath(IndexConstants.GPX_INDEX_DIR);
 		List<GPXInfo> gpxList = getSortedGPXFilesInfo(gpxDir, null, false);
@@ -123,17 +123,17 @@ public class StartPlanRouteBottomSheet extends BottomSheetBehaviourDialogFragmen
 
 	private void onItemClick(int position, List<GPXInfo> gpxInfoList) {
 		if (position != RecyclerView.NO_POSITION && position < gpxInfoList.size()) {
-			String fileName = gpxInfoList.get(position).getFileName();
+			String filePath = gpxInfoList.get(position).getFilePath();
 			FragmentActivity activity = getActivity();
 			if (activity != null) {
-				MeasurementToolFragment.showInstance(activity.getSupportFragmentManager(), fileName, true);
+				MeasurementToolFragment.showInstance(activity.getSupportFragmentManager(), filePath, true);
 			}
 		}
 		dismiss();
 	}
 
 	private void importTrack() {
-		Intent intent = ImportHelper.getImportTrackIntent();
+		Intent intent = ImportHelper.getImportFileIntent();
 		AndroidUtils.startActivityForResultIfSafe(this, intent, OPEN_GPX_DOCUMENT_REQUEST);
 	}
 
@@ -142,14 +142,16 @@ public class StartPlanRouteBottomSheet extends BottomSheetBehaviourDialogFragmen
 		if (requestCode == OPEN_GPX_DOCUMENT_REQUEST && resultCode == Activity.RESULT_OK) {
 			if (data != null) {
 				Uri uri = data.getData();
-				importHelper.setGpxImportListener(new GpxImportListener() {
-					@Override
-					public void onImportComplete(boolean success) {
-						finishImport(success);
-						importHelper.setGpxImportListener(null);
-					}
-				});
-				importHelper.handleGpxImport(uri, ImportHelper.OnSuccessfulGpxImport.OPEN_PLAN_ROUTE_FRAGMENT, false);
+				if (uri != null) {
+					importHelper.setGpxImportListener(new GpxImportListener() {
+						@Override
+						public void onImportComplete(boolean success) {
+							finishImport(success);
+							importHelper.setGpxImportListener(null);
+						}
+					});
+					importHelper.handleGpxImport(uri, OPEN_PLAN_ROUTE_FRAGMENT, false);
+				}
 			}
 		} else {
 			super.onActivityResult(requestCode, resultCode, data);
@@ -158,29 +160,8 @@ public class StartPlanRouteBottomSheet extends BottomSheetBehaviourDialogFragmen
 
 	void finishImport(boolean success) {
 		if (success) {
-			dismiss();
+			dismissAllowingStateLoss();
 		}
-	}
-
-	private SelectFileListener createSelectFileListener() {
-		return new SelectFileListener() {
-			@Override
-			public void selectFileOnCLick(String fileName) {
-				dismiss();
-				MapActivity mapActivity = (MapActivity) getActivity();
-				if (mapActivity != null) {
-					MeasurementToolFragment.showInstance(mapActivity.getSupportFragmentManager(), fileName, true);
-				}
-			}
-
-			@Override
-			public void dismissButtonOnClick() {
-				MapActivity mapActivity = (MapActivity) getActivity();
-				if (mapActivity != null) {
-					showBottomSheet();
-				}
-			}
-		};
 	}
 
 	public static void showInstance(FragmentManager fragmentManager) {
@@ -214,5 +195,15 @@ public class StartPlanRouteBottomSheet extends BottomSheetBehaviourDialogFragmen
 	@Override
 	protected int getDismissButtonTextId() {
 		return R.string.shared_string_cancel;
+	}
+
+	@Override
+	public boolean processResult(String filePath) {
+		dismiss();
+		MapActivity mapActivity = (MapActivity) getActivity();
+		if (mapActivity != null) {
+			MeasurementToolFragment.showInstance(mapActivity.getSupportFragmentManager(), filePath, true);
+		}
+		return true;
 	}
 }

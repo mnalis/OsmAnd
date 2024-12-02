@@ -1,5 +1,7 @@
 package net.osmand.plus.views.layers;
 
+import static net.osmand.plus.AppInitEvents.INDEX_REGION_BOUNDARIES;
+
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -10,7 +12,9 @@ import android.graphics.Path;
 import android.graphics.PointF;
 import android.text.TextPaint;
 import android.util.DisplayMetrics;
-import android.view.WindowManager;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import net.osmand.binary.BinaryMapDataObject;
 import net.osmand.core.android.MapRendererView;
@@ -25,8 +29,9 @@ import net.osmand.data.QuadRect;
 import net.osmand.data.RotatedTileBox;
 import net.osmand.map.OsmandRegions;
 import net.osmand.map.WorldRegion;
+import net.osmand.plus.AppInitEvents;
+import net.osmand.plus.AppInitializeListener;
 import net.osmand.plus.AppInitializer;
-import net.osmand.plus.AppInitializer.InitEvents;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
@@ -34,14 +39,15 @@ import net.osmand.plus.download.DownloadActivityType;
 import net.osmand.plus.download.DownloadIndexesThread;
 import net.osmand.plus.download.DownloadResources;
 import net.osmand.plus.download.IndexItem;
-import net.osmand.plus.download.LocalIndexHelper;
-import net.osmand.plus.download.LocalIndexInfo;
+import net.osmand.plus.download.local.LocalIndexHelper;
+import net.osmand.plus.download.local.LocalItem;
 import net.osmand.plus.download.ui.DownloadMapToolbarController;
 import net.osmand.plus.mapcontextmenu.MapContextMenu;
 import net.osmand.plus.mapcontextmenu.other.MapMultiSelectionMenu;
 import net.osmand.plus.plugins.PluginsHelper;
 import net.osmand.plus.resources.ResourceManager;
 import net.osmand.plus.resources.ResourceManager.ResourceListener;
+import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.NativeUtilities;
 import net.osmand.plus.views.OsmandMapTileView;
 import net.osmand.plus.views.layers.ContextMenuLayer.IContextMenuProvider;
@@ -62,9 +68,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 public class DownloadedRegionsLayer extends OsmandMapLayer implements IContextMenuProvider, IContextMenuProviderSelection,
 		ResourceListener {
@@ -118,7 +121,7 @@ public class DownloadedRegionsLayer extends OsmandMapLayer implements IContextMe
 		private final BinaryMapDataObject dataObject;
 		private final WorldRegion worldRegion;
 		private final IndexItem indexItem;
-		private final LocalIndexInfo localIndexInfo;
+		private final LocalItem localItem;
 
 		@NonNull
 		public BinaryMapDataObject getDataObject() {
@@ -136,18 +139,18 @@ public class DownloadedRegionsLayer extends OsmandMapLayer implements IContextMe
 		}
 
 		@Nullable
-		public LocalIndexInfo getLocalIndexInfo() {
-			return localIndexInfo;
+		public LocalItem getLocalItem() {
+			return localItem;
 		}
 
 		public DownloadMapObject(@NonNull BinaryMapDataObject dataObject,
 		                         @NonNull WorldRegion worldRegion,
 		                         @Nullable IndexItem indexItem,
-		                         @Nullable LocalIndexInfo localIndexInfo) {
+		                         @Nullable LocalItem localItem) {
 			this.dataObject = dataObject;
 			this.worldRegion = worldRegion;
 			this.indexItem = indexItem;
-			this.localIndexInfo = localIndexInfo;
+			this.localItem = localItem;
 		}
 	}
 
@@ -171,12 +174,8 @@ public class DownloadedRegionsLayer extends OsmandMapLayer implements IContextMe
 		paintBackuped = getPaint(getColor(R.color.region_backuped));
 
 		textPaint = new TextPaint();
-		WindowManager wmgr = (WindowManager) view.getApplication().getSystemService(Context.WINDOW_SERVICE);
-		DisplayMetrics dm = new DisplayMetrics();
-		wmgr.getDefaultDisplay().getMetrics(dm);
-		textPaint.setStrokeWidth(21 * dm.scaledDensity);
-		textPaint.setAntiAlias(true);
-		textPaint.setTextAlign(Paint.Align.CENTER);
+
+		updatePaints();
 
 		pathDownloaded = new Path();
 		pathSelected = new Path();
@@ -210,6 +209,20 @@ public class DownloadedRegionsLayer extends OsmandMapLayer implements IContextMe
 			}
 		};
 		addMapsInitializedListener();
+	}
+
+	@Override
+	protected void updateResources() {
+		super.updateResources();
+		updatePaints();
+	}
+
+	private void updatePaints() {
+		DisplayMetrics metrics = new DisplayMetrics();
+		AndroidUtils.getDisplay(app).getMetrics(metrics);
+		textPaint.setStrokeWidth(21 * metrics.scaledDensity);
+		textPaint.setAntiAlias(true);
+		textPaint.setTextAlign(Paint.Align.CENTER);
 	}
 
 	private Paint getPaint(int color) {
@@ -299,7 +312,7 @@ public class DownloadedRegionsLayer extends OsmandMapLayer implements IContextMe
 
 			DownloadIndexesThread downloadThread = app.getDownloadThread();
 			DownloadResources indexes = downloadThread.getIndexes();
-			if (!indexes.getExternalMapFileNamesAt(cx, cy, zoom, false).isEmpty()) {
+			if (!indexes.getExternalMapFileNamesAt(cx, cy, false).isEmpty()) {
 				hideDownloadMapToolbar();
 				return;
 			}
@@ -589,26 +602,6 @@ public class DownloadedRegionsLayer extends OsmandMapLayer implements IContextMe
 				getContext().getString(R.string.shared_string_map), "");
 	}
 
-	@Override
-	public boolean disableSingleTap() {
-		return false;
-	}
-
-	@Override
-	public boolean disableLongPressOnMap(PointF point, RotatedTileBox tileBox) {
-		return false;
-	}
-
-	@Override
-	public boolean runExclusiveAction(Object o, boolean unknownLocation) {
-		return false;
-	}
-
-	@Override
-	public boolean showMenuAction(@Nullable Object o) {
-		return false;
-	}
-
 	private void getWorldRegionFromPoint(RotatedTileBox tb, PointF point, List<? super DownloadMapObject> dataObjects) {
 		int zoom = tb.getZoom();
 		if (zoom >= ZOOM_TO_SHOW_SELECTION_ST && zoom < ZOOM_TO_SHOW_SELECTION
@@ -621,7 +614,7 @@ public class DownloadedRegionsLayer extends OsmandMapLayer implements IContextMe
 			Iterator<BinaryMapDataObject> it = result.iterator();
 			while (it.hasNext()) {
 				BinaryMapDataObject o = it.next();
-				if (!osmandRegions.contain(o, point31x, point31y) ) {
+				if (!osmandRegions.contain(o, point31x, point31y)) {
 					it.remove();
 				}
 			}
@@ -651,11 +644,11 @@ public class DownloadedRegionsLayer extends OsmandMapLayer implements IContextMe
 						}
 					} else {
 						String downloadName = osmandRegions.getDownloadName(o);
-						List<LocalIndexInfo> infos = helper.getLocalIndexInfos(downloadName);
+						List<LocalItem> infos = helper.getLocalItems(downloadName);
 						if (infos.size() == 0) {
 							dataObjects.add(new DownloadMapObject(o, region, null, null));
 						} else {
-							for (LocalIndexInfo info : infos) {
+							for (LocalItem info : infos) {
 								dataObjects.add(new DownloadMapObject(o, region, null, info));
 							}
 						}
@@ -673,8 +666,8 @@ public class DownloadedRegionsLayer extends OsmandMapLayer implements IContextMe
 			order = mapObject.worldRegion.getLevel() * 1000 - 100000;
 			if (mapObject.indexItem != null) {
 				order += mapObject.indexItem.getType().getOrderIndex();
-			} else if (mapObject.localIndexInfo != null) {
-				order += mapObject.localIndexInfo.getType().getOrderIndex(mapObject.localIndexInfo);
+			} else if (mapObject.localItem != null) {
+				order += mapObject.localItem.getType().ordinal();
 			}
 		}
 		return order;
@@ -812,10 +805,10 @@ public class DownloadedRegionsLayer extends OsmandMapLayer implements IContextMe
 	private void addMapsInitializedListener() {
 		OsmandApplication app = getApplication();
 		if (app.isApplicationInitializing()) {
-			app.getAppInitializer().addListener(new AppInitializer.AppInitializeListener() {
+			app.getAppInitializer().addListener(new AppInitializeListener() {
 				@Override
-				public void onProgress(@NonNull AppInitializer init, @NonNull InitEvents event) {
-					if (event == AppInitializer.InitEvents.INDEX_REGION_BOUNDARIES) {
+				public void onProgress(@NonNull AppInitializer init, @NonNull AppInitEvents event) {
+					if (event == INDEX_REGION_BOUNDARIES) {
 						indexRegionBoundaries = true;
 					}
 				}

@@ -13,13 +13,21 @@ import com.dsi.ant.plugins.antplus.pcc.defines.DeviceState;
 import com.dsi.ant.plugins.antplus.pcc.defines.RequestAccessResult;
 import com.dsi.ant.plugins.antplus.pccbase.PccReleaseHandle;
 
+import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.plugins.externalsensors.DeviceType;
+import net.osmand.plus.plugins.externalsensors.devices.sensors.DeviceChangeableProperty;
+import net.osmand.plus.plugins.externalsensors.devices.sensors.ant.AntAbstractSensor;
 import net.osmand.plus.plugins.externalsensors.devices.sensors.ant.AntBikeDistanceSensor;
 import net.osmand.plus.plugins.externalsensors.devices.sensors.ant.AntBikeSpeedSensor;
+import net.osmand.util.Algorithms;
+
+import java.util.Collections;
+import java.util.List;
 
 public class AntBikeSpeedDistanceDevice extends AntLegacyDevice<AntPlusBikeSpeedDistancePcc> {
 
 	private AntBikeSpeedCadenceDevice spdCadDevice;
+	float wheelCircumference = 0f;
 
 	private class BikeSpeedDistancePluginAccessResultReceiver extends PluginAccessResultReceiver {
 
@@ -48,13 +56,24 @@ public class AntBikeSpeedDistanceDevice extends AntLegacyDevice<AntPlusBikeSpeed
 		sensors.add(new AntBikeDistanceSensor(this));
 	}
 
+	public float getWheelCircumference() {
+		return wheelCircumference;
+	}
+
+	public void setWheelCircumference(float wheelCircumference) {
+		this.wheelCircumference = wheelCircumference;
+		for (AntAbstractSensor sensor : sensors) {
+			sensor.subscribeToEvents();
+		}
+	}
+
 	@NonNull
 	@Override
 	public DeviceType getDeviceType() {
 		return DeviceType.ANT_BICYCLE_SD;
 	}
 
-	public static AntBikeSpeedDistanceDevice createSearchableDevice() {
+	public static AntBikeSpeedDistanceDevice createSearchableDevice(OsmandApplication application) {
 		return new AntBikeSpeedDistanceDevice(SEARCHING_ID_PREFIX
 				+ AntBikeSpeedDistanceDevice.class.getSimpleName());
 	}
@@ -78,5 +97,24 @@ public class AntBikeSpeedDistanceDevice extends AntLegacyDevice<AntPlusBikeSpeed
 			res |= spdCadDevice.disconnect();
 		}
 		return res;
+	}
+
+	@NonNull
+	@Override
+	public List<DeviceChangeableProperty> getChangeableProperties() {
+		return Collections.singletonList(DeviceChangeableProperty.WHEEL_CIRCUMFERENCE);
+	}
+
+	@Override
+	public void setChangeableProperty(DeviceChangeableProperty property, String value) {
+		if (property == DeviceChangeableProperty.WHEEL_CIRCUMFERENCE) {
+			try {
+				setWheelCircumference(Float.parseFloat(value));
+			} catch(RuntimeException e) {
+				LOG.error(e.getMessage(), e);
+			}
+		} else {
+			super.setChangeableProperty(property, value);
+		}
 	}
 }

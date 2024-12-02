@@ -3,12 +3,15 @@ package net.osmand.plus.plugins.weather;
 import static net.osmand.aidlapi.OsmAndCustomizationConstants.DRAWER_WEATHER_FORECAST_ID;
 import static net.osmand.aidlapi.OsmAndCustomizationConstants.PLUGIN_WEATHER;
 import static net.osmand.aidlapi.OsmAndCustomizationConstants.WEATHER_ID;
+import static net.osmand.plus.AppInitEvents.INDEX_REGION_BOUNDARIES;
+import static net.osmand.plus.AppInitEvents.NATIVE_OPEN_GL_INITIALIZED;
 import static net.osmand.plus.chooseplan.OsmAndFeature.WEATHER;
+import static net.osmand.plus.download.DownloadActivityType.WEATHER_FORECAST;
 import static net.osmand.plus.plugins.weather.WeatherBand.WEATHER_BAND_CLOUD;
+import static net.osmand.plus.plugins.weather.WeatherBand.WEATHER_BAND_NOTHING;
 import static net.osmand.plus.plugins.weather.WeatherBand.WEATHER_BAND_PRECIPITATION;
 import static net.osmand.plus.plugins.weather.WeatherBand.WEATHER_BAND_PRESSURE;
 import static net.osmand.plus.plugins.weather.WeatherBand.WEATHER_BAND_TEMPERATURE;
-import static net.osmand.plus.plugins.weather.WeatherBand.WEATHER_BAND_UNDEFINED;
 import static net.osmand.plus.plugins.weather.WeatherBand.WEATHER_BAND_WIND_SPEED;
 import static net.osmand.plus.plugins.weather.WeatherSettings.WEATHER_CLOUD_CONTOURS_LINES_ATTR;
 import static net.osmand.plus.plugins.weather.WeatherSettings.WEATHER_PRECIPITATION_CONTOURS_LINES_ATTR;
@@ -32,9 +35,9 @@ import androidx.annotation.Nullable;
 
 import net.osmand.PlatformUtil;
 import net.osmand.core.android.MapRendererContext;
+import net.osmand.plus.AppInitEvents;
+import net.osmand.plus.AppInitializeListener;
 import net.osmand.plus.AppInitializer;
-import net.osmand.plus.AppInitializer.AppInitializeListener;
-import net.osmand.plus.AppInitializer.InitEvents;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
@@ -42,8 +45,8 @@ import net.osmand.plus.chooseplan.OsmAndFeature;
 import net.osmand.plus.chooseplan.button.PurchasingUtils;
 import net.osmand.plus.dashboard.DashboardOnMap;
 import net.osmand.plus.dashboard.DashboardOnMap.DashboardType;
-import net.osmand.plus.download.DownloadOsmandIndexesHelper.IndexFileList;
-import net.osmand.plus.inapp.InAppPurchaseHelper;
+import net.osmand.plus.download.IndexItem;
+import net.osmand.plus.inapp.InAppPurchaseUtils;
 import net.osmand.plus.plugins.OsmandPlugin;
 import net.osmand.plus.plugins.weather.WeatherBand.WeatherBandType;
 import net.osmand.plus.plugins.weather.WeatherRasterLayer.WeatherLayer;
@@ -54,6 +57,7 @@ import net.osmand.plus.plugins.weather.actions.ShowHidePrecipitationLayerAction;
 import net.osmand.plus.plugins.weather.actions.ShowHideTemperatureLayerAction;
 import net.osmand.plus.plugins.weather.actions.ShowHideWindLayerAction;
 import net.osmand.plus.plugins.weather.dialogs.WeatherForecastFragment;
+import net.osmand.plus.plugins.weather.enums.WeatherSource;
 import net.osmand.plus.plugins.weather.widgets.WeatherWidget;
 import net.osmand.plus.quickaction.QuickActionType;
 import net.osmand.plus.settings.backend.ApplicationMode;
@@ -61,6 +65,7 @@ import net.osmand.plus.settings.backend.WidgetsAvailabilityHelper;
 import net.osmand.plus.settings.backend.preferences.CommonPreference;
 import net.osmand.plus.settings.fragments.SettingsScreenType;
 import net.osmand.plus.utils.AndroidUtils;
+import net.osmand.plus.utils.UiUtilities;
 import net.osmand.plus.views.OsmandMapTileView;
 import net.osmand.plus.views.corenative.NativeCoreContext;
 import net.osmand.plus.views.layers.DownloadedRegionsLayer;
@@ -68,6 +73,7 @@ import net.osmand.plus.views.layers.base.OsmandMapLayer;
 import net.osmand.plus.views.mapwidgets.MapWidgetInfo;
 import net.osmand.plus.views.mapwidgets.WidgetInfoCreator;
 import net.osmand.plus.views.mapwidgets.WidgetType;
+import net.osmand.plus.views.mapwidgets.WidgetsPanel;
 import net.osmand.plus.views.mapwidgets.widgets.MapWidget;
 import net.osmand.plus.widgets.ctxmenu.ContextMenuAdapter;
 import net.osmand.plus.widgets.ctxmenu.callback.ItemClickListener;
@@ -103,7 +109,7 @@ public class WeatherPlugin extends OsmandPlugin {
 	private Date forecastDate;
 
 	@WeatherBandType
-	private short currentConfigureBand = WEATHER_BAND_UNDEFINED;
+	private short currentConfigureBand = WEATHER_BAND_NOTHING;
 
 	public WeatherPlugin(@NonNull OsmandApplication app) {
 		super(app);
@@ -123,11 +129,15 @@ public class WeatherPlugin extends OsmandPlugin {
 
 		app.getAppInitializer().addListener(new AppInitializeListener() {
 			@Override
-			public void onProgress(@NonNull AppInitializer init, @NonNull InitEvents event) {
-				if (event == InitEvents.NATIVE_OPEN_GL_INITIALIZED) {
+			public void onProgress(@NonNull AppInitializer init, @NonNull AppInitEvents event) {
+				if (event == NATIVE_OPEN_GL_INITIALIZED) {
 					updateMapPresentationEnvironment();
 					updateLayers(app, null);
-				} else if (event == InitEvents.INDEX_REGION_BOUNDARIES) {
+
+					if (weatherHelper.shouldUpdateForecastCache()) {
+						weatherHelper.updateForecastCache();
+					}
+				} else if (event == INDEX_REGION_BOUNDARIES) {
 					clearOutdatedCache();
 				}
 			}
@@ -148,6 +158,10 @@ public class WeatherPlugin extends OsmandPlugin {
 	public boolean init(@NonNull OsmandApplication app, @Nullable Activity activity) {
 		if (!app.getAppInitializer().isAppInitializing()) {
 			updateMapPresentationEnvironment();
+
+			if (weatherHelper.shouldUpdateForecastCache()) {
+				weatherHelper.updateForecastCache();
+			}
 		}
 		return super.init(app, activity);
 	}
@@ -170,7 +184,7 @@ public class WeatherPlugin extends OsmandPlugin {
 
 	@Override
 	public boolean isEnabled() {
-		return WeatherHelper.isWeatherSupported(app) && super.isEnabled();
+		return WeatherUtils.isWeatherSupported(app) && super.isEnabled();
 	}
 
 	@Override
@@ -179,8 +193,10 @@ public class WeatherPlugin extends OsmandPlugin {
 	}
 
 	@Override
-	public CharSequence getDescription() {
-		return app.getString(R.string.weather_plugin_description);
+	public CharSequence getDescription(boolean linksEnabled) {
+		String infoUrl = app.getString(R.string.weather_global_forecast_system);
+		String description = app.getString(R.string.weather_plugin_description, infoUrl);
+		return linksEnabled ? UiUtilities.createUrlSpannable(description, infoUrl) : description;
 	}
 
 	@Override
@@ -200,7 +216,7 @@ public class WeatherPlugin extends OsmandPlugin {
 
 	@Override
 	public boolean isLocked() {
-		return !InAppPurchaseHelper.isOsmAndProAvailable(app);
+		return !InAppPurchaseUtils.isWeatherAvailable(app);
 	}
 
 	@Nullable
@@ -252,20 +268,26 @@ public class WeatherPlugin extends OsmandPlugin {
 
 	@Nullable
 	@Override
-	public WeatherWidget createMapWidgetForParams(@NonNull MapActivity mapActivity, @NonNull WidgetType widgetType) {
+	public WeatherWidget createMapWidgetForParams(@NonNull MapActivity mapActivity, @NonNull WidgetType widgetType, @Nullable String customId, @Nullable WidgetsPanel widgetsPanel) {
 		switch (widgetType) {
 			case WEATHER_TEMPERATURE_WIDGET:
-				return new WeatherWidget(mapActivity, widgetType, WEATHER_BAND_TEMPERATURE);
+				return new WeatherWidget(mapActivity, widgetType, customId, WEATHER_BAND_TEMPERATURE);
 			case WEATHER_PRECIPITATION_WIDGET:
-				return new WeatherWidget(mapActivity, widgetType, WEATHER_BAND_PRECIPITATION);
+				return new WeatherWidget(mapActivity, widgetType, customId, WEATHER_BAND_PRECIPITATION);
 			case WEATHER_WIND_WIDGET:
-				return new WeatherWidget(mapActivity, widgetType, WEATHER_BAND_WIND_SPEED);
+				return new WeatherWidget(mapActivity, widgetType, customId, WEATHER_BAND_WIND_SPEED);
 			case WEATHER_CLOUDS_WIDGET:
-				return new WeatherWidget(mapActivity, widgetType, WEATHER_BAND_CLOUD);
+				return new WeatherWidget(mapActivity, widgetType, customId, WEATHER_BAND_CLOUD);
 			case WEATHER_AIR_PRESSURE_WIDGET:
-				return new WeatherWidget(mapActivity, widgetType, WEATHER_BAND_PRESSURE);
+				return new WeatherWidget(mapActivity, widgetType, customId, WEATHER_BAND_PRESSURE);
 		}
 		return null;
+	}
+
+	@Nullable
+	@Override
+	public WeatherWidget createMapWidgetForParams(@NonNull MapActivity mapActivity, @NonNull WidgetType widgetType) {
+		return createMapWidgetForParams(mapActivity, widgetType, null, null);
 	}
 
 	@Override
@@ -425,7 +447,7 @@ public class WeatherPlugin extends OsmandPlugin {
 		weatherLayerLow = new WeatherRasterLayer(app, WeatherLayer.LOW);
 		weatherLayerHigh = new WeatherRasterLayer(app, WeatherLayer.HIGH);
 		weatherContourLayer = new WeatherContourLayer(app);
-		updateLayersDate();
+		updateLayersDate(false, false);
 	}
 
 	public void setWeatherEnabled(boolean enable) {
@@ -444,6 +466,14 @@ public class WeatherPlugin extends OsmandPlugin {
 
 	public boolean isContoursEnabled() {
 		return weatherSettings.weatherContoursEnabled.get();
+	}
+
+	public WeatherSource getWeatherSource() {
+		return WeatherSource.Companion.getWeatherSourceBySettingsValue(weatherSettings.weatherSource.get());
+	}
+
+	public void setWeatherSource(WeatherSource source) {
+		weatherSettings.weatherSource.set(source.getSettingValue());
 	}
 
 	public boolean isAnyWeatherContourLinesEnabled() {
@@ -515,7 +545,7 @@ public class WeatherPlugin extends OsmandPlugin {
 	private void updateMapSettings() {
 		MapRendererContext mapContext = NativeCoreContext.getMapRendererContext();
 		if (mapContext != null) {
-			mapContext.updateMapSettings();
+			mapContext.updateMapSettings(true);
 		}
 		weatherHelper.updateBandsSettings();
 	}
@@ -524,18 +554,29 @@ public class WeatherPlugin extends OsmandPlugin {
 		return forecastDate != null;
 	}
 
-	public void setForecastDate(@Nullable Date date) {
+	public void setForecastDate(@Nullable Date date, boolean forAnimation, boolean resetPeriod) {
 		forecastDate = date;
-		updateLayersDate();
+		updateLayersDate(forAnimation, resetPeriod);
 	}
 
-	private void updateLayersDate() {
-		long time = forecastDate != null ? forecastDate.getTime() : System.currentTimeMillis();
+	public void prepareForDayAnimation(@NonNull Date date) {
+		forecastDate = date;
+		long time = forecastDate.getTime();
 		if (weatherLayerLow != null) {
-			weatherLayerLow.setDateTime(time);
+			weatherLayerLow.setDateTime(time, true, false);
 		}
 		if (weatherLayerHigh != null) {
-			weatherLayerHigh.setDateTime(time);
+			weatherLayerHigh.setDateTime(time, true, false);
+		}
+	}
+
+	private void updateLayersDate(boolean forAnimation, boolean resetPeriod) {
+		long time = forecastDate != null ? forecastDate.getTime() : System.currentTimeMillis();
+		if (weatherLayerLow != null) {
+			weatherLayerLow.setDateTime(time, forAnimation, resetPeriod);
+		}
+		if (weatherLayerHigh != null) {
+			weatherLayerHigh.setDateTime(time, forAnimation, resetPeriod);
 		}
 		if (weatherContourLayer != null) {
 			weatherContourLayer.setDateTime(time);
@@ -547,8 +588,9 @@ public class WeatherPlugin extends OsmandPlugin {
 		return hasCustomForecast() && layer instanceof DownloadedRegionsLayer;
 	}
 
-	@Override
-	public void addPluginIndexItems(@NonNull IndexFileList indexes) {
-		weatherHelper.getOfflineForecastHelper().addWeatherIndexItems(indexes);
+	public void onIndexItemDownloaded(@NonNull IndexItem item, boolean updatingFile) {
+		if (item.getType() == WEATHER_FORECAST) {
+			weatherHelper.updateForecastCache(item.getTargetFile(app).getAbsolutePath());
+		}
 	}
 }

@@ -1,7 +1,7 @@
 package net.osmand.plus.plugins.externalsensors.devices.sensors.ant;
 
-import static net.osmand.gpx.GPXUtilities.DECIMAL_FORMAT;
-import static net.osmand.plus.plugins.externalsensors.SensorAttributesUtils.SENSOR_TAG_BIKE_POWER;
+import static net.osmand.shared.gpx.PointAttributes.SENSOR_TAG_BIKE_POWER;
+import static net.osmand.util.Algorithms.DECIMAL_FORMAT;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -138,13 +138,17 @@ public class AntBikePowerSensor extends AntAbstractSensor<AntPlusBikePowerPcc> {
 
 	@Override
 	public void subscribeToEvents() {
-		getAntDevice().getPcc().subscribeCalculatedPowerEvent((estTimestamp, eventFlags, dataSource, calculatedPower) -> {
-			boolean powerOnlyData = AntPlusBikePowerPcc.DataSource.POWER_ONLY_DATA.equals(dataSource);
-			boolean initialPowerOnlyData = AntPlusBikePowerPcc.DataSource.INITIAL_VALUE_POWER_ONLY_DATA.equals(dataSource);
-			lastBikePowerData = new BikePowerData(estTimestamp, calculatedPower.doubleValue(),
-					powerOnlyData, initialPowerOnlyData);
-			getDevice().fireSensorDataEvent(this, lastBikePowerData);
-		});
+		AntPlusBikePowerPcc pcc = getAntDevice().getPcc();
+		if (pcc != null) {
+			pcc.subscribeRssiEvent(null);
+			pcc.subscribeCalculatedPowerEvent((estTimestamp, eventFlags, dataSource, calculatedPower) -> {
+				boolean powerOnlyData = AntPlusBikePowerPcc.DataSource.POWER_ONLY_DATA.equals(dataSource);
+				boolean initialPowerOnlyData = AntPlusBikePowerPcc.DataSource.INITIAL_VALUE_POWER_ONLY_DATA.equals(dataSource);
+				lastBikePowerData = new BikePowerData(estTimestamp, calculatedPower.doubleValue(),
+						powerOnlyData, initialPowerOnlyData);
+				getDevice().fireSensorDataEvent(this, lastBikePowerData);
+			});
+		}
 	}
 
 	@Override

@@ -10,7 +10,6 @@ import net.osmand.plus.OsmAndLocationProvider.GPSInfo;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.helpers.AndroidUiHelper;
-import net.osmand.plus.settings.backend.preferences.OsmandPreference;
 import net.osmand.plus.views.layers.base.OsmandMapLayer.DrawSettings;
 
 public class CoordinatesCurrentLocationWidget extends CoordinatesBaseWidget {
@@ -21,14 +20,15 @@ public class CoordinatesCurrentLocationWidget extends CoordinatesBaseWidget {
 
 	@Override
 	public void updateInfo(@Nullable DrawSettings drawSettings) {
-		boolean visible = mapActivity.getWidgetsVisibilityHelper().shouldShowTopCurrentLocationCoordinatesWidget();
+		super.updateInfo(drawSettings);
+		boolean visible = mapActivity.getWidgetsVisibilityHelper().shouldShowTopCoordinatesWidget();
 		updateVisibility(visible);
 		if (visible) {
-			Location lastKnownLocation = locationProvider.getLastKnownLocation();
-			if (lastKnownLocation == null) {
+			Location location = locationProvider.getLastKnownLocation();
+			if (location == null) {
 				showSearchingGpsMessage();
 			} else {
-				showFormattedCoordinates(lastKnownLocation.getLatitude(), lastKnownLocation.getLongitude());
+				showFormattedCoordinates(location.getLatitude(), location.getLongitude());
 			}
 		}
 	}
@@ -36,9 +36,10 @@ public class CoordinatesCurrentLocationWidget extends CoordinatesBaseWidget {
 	private void showSearchingGpsMessage() {
 		AndroidUiHelper.updateVisibility(firstIcon, false);
 		AndroidUiHelper.updateVisibility(divider, false);
+		AndroidUiHelper.updateVisibility(firstContainer, true);
 		AndroidUiHelper.updateVisibility(secondContainer, false);
 		GPSInfo gpsInfo = locationProvider.getGPSInfo();
 		String message = getString(R.string.searching_gps) + "… " + gpsInfo.usedSatellites + "/" + gpsInfo.foundSatellites;
-		firstCoordinate.setText(message);
+		setFirstCoordinateText(message);
 	}
 }

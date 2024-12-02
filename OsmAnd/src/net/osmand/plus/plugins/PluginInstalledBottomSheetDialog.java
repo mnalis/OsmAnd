@@ -1,8 +1,10 @@
 package net.osmand.plus.plugins;
 
+import static net.osmand.plus.download.DownloadActivityType.SRTM_COUNTRY_FILE;
+import static net.osmand.plus.download.SrtmDownloadItem.getAbbreviationInScopes;
+
 import android.app.Activity;
 import android.content.Context;
-import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.text.SpannableString;
@@ -11,6 +13,7 @@ import android.widget.ImageView;
 import android.widget.ProgressBar;
 
 import androidx.annotation.NonNull;
+import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 
 import net.osmand.PlatformUtil;
@@ -24,16 +27,17 @@ import net.osmand.plus.base.bottomsheetmenu.BottomSheetItemWithDescription;
 import net.osmand.plus.base.bottomsheetmenu.SimpleBottomSheetItem;
 import net.osmand.plus.base.bottomsheetmenu.simpleitems.DividerItem;
 import net.osmand.plus.base.bottomsheetmenu.simpleitems.TitleItem;
+import net.osmand.plus.download.DownloadActivityType;
 import net.osmand.plus.download.DownloadIndexesThread;
 import net.osmand.plus.download.DownloadIndexesThread.DownloadEvents;
 import net.osmand.plus.download.DownloadValidationManager;
 import net.osmand.plus.download.IndexItem;
 import net.osmand.plus.helpers.AndroidUiHelper;
-import net.osmand.plus.helpers.FontCache;
 import net.osmand.plus.profiles.data.ProfileDataUtils;
 import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.ColorUtilities;
+import net.osmand.plus.utils.FontCache;
 import net.osmand.plus.utils.UiUtilities;
 import net.osmand.plus.widgets.style.CustomTypefaceSpan;
 
@@ -86,9 +90,8 @@ public class PluginInstalledBottomSheetDialog extends MenuBottomSheetDialogFragm
 				.create();
 		items.add(titleItem);
 
-		Typeface typeface = FontCache.getRobotoMedium(getContext());
 		SpannableString pluginTitleSpan = new SpannableString(plugin.getName());
-		pluginTitleSpan.setSpan(new CustomTypefaceSpan(typeface), 0, pluginTitleSpan.length(), 0);
+		pluginTitleSpan.setSpan(new CustomTypefaceSpan(FontCache.getMediumFont()), 0, pluginTitleSpan.length(), 0);
 		Drawable pluginIcon = plugin.getLogoResource();
 		if (pluginIcon.getConstantState() != null) {
 			pluginIcon = pluginIcon.getConstantState().newDrawable().mutate();
@@ -105,19 +108,16 @@ public class PluginInstalledBottomSheetDialog extends MenuBottomSheetDialogFragm
 
 		descrItem = (BottomSheetItemTitleWithDescrAndButton) new BottomSheetItemTitleWithDescrAndButton.Builder()
 				.setButtonTitle(getString(R.string.show_full_description))
-				.setOnButtonClickListener(new View.OnClickListener() {
-					@Override
-					public void onClick(View v) {
-						descriptionExpanded = !descriptionExpanded;
-						descrItem.setButtonText(getString(descriptionExpanded
-								? R.string.hide_full_description : R.string.show_full_description));
-						descrItem.setDescriptionMaxLines(descriptionExpanded
-								? Integer.MAX_VALUE : COLLAPSED_DESCRIPTION_LINES);
-						setupHeightAndBackground(getView());
-					}
+				.setOnButtonClickListener(v -> {
+					descriptionExpanded = !descriptionExpanded;
+					descrItem.setButtonText(getString(descriptionExpanded
+							? R.string.hide_full_description : R.string.show_full_description));
+					descrItem.setDescriptionMaxLines(descriptionExpanded
+							? Integer.MAX_VALUE : COLLAPSED_DESCRIPTION_LINES);
+					setupHeightAndBackground(getView());
 				})
 				.setDescriptionLinksClickable(true)
-				.setDescription(plugin.getDescription())
+				.setDescription(plugin.getDescription(true))
 				.setDescriptionMaxLines(COLLAPSED_DESCRIPTION_LINES)
 				.setLayoutId(R.layout.bottom_sheet_item_with_expandable_descr)
 				.create();
@@ -187,8 +187,10 @@ public class PluginInstalledBottomSheetDialog extends MenuBottomSheetDialogFragm
 			Activity activity = getActivity();
 			PluginsHelper.enablePlugin(activity, app, plugin, false);
 
-			if (activity instanceof PluginStateListener) {
-				((PluginStateListener) activity).onPluginStateChanged(plugin);
+			for (Fragment fragment : getParentFragmentManager().getFragments()) {
+				if (fragment instanceof PluginStateListener) {
+					((PluginStateListener) fragment).onPluginStateChanged(plugin);
+				}
 			}
 		}
 	}
@@ -282,23 +284,27 @@ public class PluginInstalledBottomSheetDialog extends MenuBottomSheetDialogFragm
 				secondaryIcon.setImageDrawable(getContentIcon(R.drawable.ic_action_import));
 			}
 
+			DownloadActivityType type = indexItem.getType();
+			StringBuilder builder = new StringBuilder(type.getString(app));
+			if (type == SRTM_COUNTRY_FILE) {
+				builder.append(" ").append(getAbbreviationInScopes(app, indexItem));
+			}
+			builder.append(" • ").append(indexItem.getSizeDescription(app));
+
 			BaseBottomSheetItem mapIndexItem = new BottomSheetItemWithDescription.Builder()
-					.setDescription(indexItem.getType().getString(app) + " • " + indexItem.getSizeDescription(app))
+					.setDescription(builder.toString())
 					.setTitle(indexItem.getVisibleName(app, app.getRegions(), false))
-					.setIcon(getContentIcon(indexItem.getType().getIconResource()))
-					.setOnClickListener(new View.OnClickListener() {
-						@Override
-						public void onClick(View v) {
-							if (downloadThread.isDownloading(indexItem)) {
-								downloadThread.cancelDownload(indexItem);
-								AndroidUiHelper.updateVisibility(progressBar, false);
-								secondaryIcon.setImageDrawable(getContentIcon(R.drawable.ic_action_import));
-							} else {
-								AndroidUiHelper.updateVisibility(progressBar, true);
-								progressBar.setIndeterminate(downloadThread.isDownloading());
-								secondaryIcon.setImageDrawable(getContentIcon(R.drawable.ic_action_remove_dark));
-								new DownloadValidationManager(app).startDownload(getActivity(), indexItem);
-							}
+					.setIcon(getContentIcon(type.getIconResource()))
+					.setOnClickListener(v -> {
+						if (downloadThread.isDownloading(indexItem)) {
+							downloadThread.cancelDownload(indexItem);
+							AndroidUiHelper.updateVisibility(progressBar, false);
+							secondaryIcon.setImageDrawable(getContentIcon(R.drawable.ic_action_import));
+						} else {
+							AndroidUiHelper.updateVisibility(progressBar, true);
+							progressBar.setIndeterminate(downloadThread.isDownloading());
+							secondaryIcon.setImageDrawable(getContentIcon(R.drawable.ic_action_remove_dark));
+							new DownloadValidationManager(app).startDownload(getActivity(), indexItem);
 						}
 					})
 					.setTag(indexItem)
@@ -325,8 +331,10 @@ public class PluginInstalledBottomSheetDialog extends MenuBottomSheetDialogFragm
 	}
 
 	public interface PluginStateListener {
+		default void onPluginStateChanged(@NonNull OsmandPlugin plugin) {
+		}
 
-		void onPluginStateChanged(@NonNull OsmandPlugin plugin);
-
+		default void onPluginInstalled(@NonNull OsmandPlugin plugin) {
+		}
 	}
 }

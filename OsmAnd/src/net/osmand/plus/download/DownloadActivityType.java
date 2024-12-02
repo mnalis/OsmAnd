@@ -1,8 +1,10 @@
 package net.osmand.plus.download;
 
 import static net.osmand.IndexConstants.BINARY_MAP_INDEX_EXT;
-import static net.osmand.IndexConstants.WEATHER_EXT;
+import static net.osmand.IndexConstants.INDEX_DOWNLOAD_DOMAIN;
 import static net.osmand.IndexConstants.WEATHER_FORECAST_DIR;
+import static net.osmand.IndexConstants.WEATHER_MAP_INDEX_EXT;
+import static net.osmand.IndexConstants.ZIP_EXT;
 import static net.osmand.plus.download.DownloadResourceGroupType.NAUTICAL_DEPTH_HEADER;
 import static net.osmand.plus.download.DownloadResourceGroupType.NAUTICAL_POINTS_HEADER;
 
@@ -17,6 +19,7 @@ import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.Version;
 import net.osmand.plus.helpers.FileNameTranslationHelper;
+import net.osmand.plus.utils.AndroidNetworkUtils;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.util.Algorithms;
 
@@ -34,6 +37,7 @@ import java.util.Locale;
 import java.util.Map;
 
 public class DownloadActivityType {
+
 	private static final SimpleDateFormat simpleDateFormat = new SimpleDateFormat("dd.MM.yyyy", Locale.US);
 	private static final Map<String, DownloadActivityType> byTag = new HashMap<>();
 
@@ -67,12 +71,10 @@ public class DownloadActivityType {
 			new DownloadActivityType(R.string.shared_string_gpx_tracks, R.drawable.ic_action_polygom_dark, "gpx", 75);
 	public static final DownloadActivityType SQLITE_FILE =
 			new DownloadActivityType(R.string.shared_string_online_maps, "sqlite", 80);
-	public static final DownloadActivityType HEIGHTMAP_FILE_LEGACY =
-			new DownloadActivityType(R.string.download_heightmap_maps, R.drawable.ic_action_altitude, "heightmap", 85);
 	public static final DownloadActivityType WEATHER_FORECAST =
 			new DownloadActivityType(R.string.weather_forecast, R.drawable.ic_action_umbrella, "weather", 90);
 	public static final DownloadActivityType GEOTIFF_FILE =
-			new DownloadActivityType(R.string.terrain_map, R.drawable.ic_action_altitude, "geotiff", 85);
+			new DownloadActivityType(R.string.terrain_map, R.drawable.ic_action_terrain, "geotiff", 85);
 
 	private final int stringResource;
 	private final int iconResource;
@@ -163,8 +165,6 @@ public class DownloadActivityType {
 			return fileName.endsWith(IndexConstants.SQLITE_EXT);
 		} else if (SLOPE_FILE == this) {
 			return fileName.endsWith(IndexConstants.SQLITE_EXT);
-		} else if (HEIGHTMAP_FILE_LEGACY == this) {
-			return fileName.endsWith(IndexConstants.HEIGHTMAP_SQLITE_EXT);
 		} else if (GEOTIFF_FILE == this) {
 			return fileName.endsWith(IndexConstants.TIF_EXT);
 		} else if (DEPTH_CONTOUR_FILE == this) {
@@ -175,48 +175,57 @@ public class DownloadActivityType {
 			return fileName.endsWith(IndexConstants.SQLITE_EXT);
 		} else if (DEPTH_MAP_FILE == this) {
 			return fileName.endsWith(addVersionToExt(IndexConstants.BINARY_DEPTH_MAP_INDEX_EXT_ZIP, IndexConstants.BINARY_MAP_VERSION));
+		} else if (WEATHER_FORECAST == this) {
+			return fileName.endsWith(WEATHER_MAP_INDEX_EXT);
 		}
 		return false;
 	}
 
-	public File getDownloadFolder(OsmandApplication ctx, IndexItem indexItem) {
+	public File getDownloadFolder(OsmandApplication app, IndexItem indexItem) {
+		if (indexItem.hidden) {
+			return app.getAppInternalPath(IndexConstants.HIDDEN_DIR);
+		} else {
+			return getDefaultDownloadFolder(app, indexItem);
+		}
+	}
+
+	@NonNull
+	public File getDefaultDownloadFolder(OsmandApplication app, IndexItem indexItem) {
 		if (NORMAL_FILE == this) {
 			if (indexItem.fileName.endsWith(IndexConstants.SQLITE_EXT)) {
-				return ctx.getAppPath(IndexConstants.TILES_INDEX_DIR);
+				return app.getAppPath(IndexConstants.TILES_INDEX_DIR);
 			}
-			return ctx.getAppPath(IndexConstants.MAPS_PATH);
+			return app.getAppPath(IndexConstants.MAPS_PATH);
 		} else if (VOICE_FILE == this) {
-			return ctx.getAppPath(IndexConstants.VOICE_INDEX_DIR);
+			return app.getAppPath(IndexConstants.VOICE_INDEX_DIR);
 		} else if (FONT_FILE == this) {
-			return ctx.getAppPath(IndexConstants.FONT_INDEX_DIR);
+			return app.getAppPath(IndexConstants.FONT_INDEX_DIR);
 		} else if (ROADS_FILE == this) {
-			return ctx.getAppPath(IndexConstants.ROADS_INDEX_DIR);
+			return app.getAppPath(IndexConstants.ROADS_INDEX_DIR);
 		} else if (SRTM_COUNTRY_FILE == this) {
-			return ctx.getAppPath(IndexConstants.SRTM_INDEX_DIR);
+			return app.getAppPath(IndexConstants.SRTM_INDEX_DIR);
 		} else if (WIKIPEDIA_FILE == this) {
-			return ctx.getAppPath(IndexConstants.WIKI_INDEX_DIR);
+			return app.getAppPath(IndexConstants.WIKI_INDEX_DIR);
 		} else if (WIKIVOYAGE_FILE == this || TRAVEL_FILE == this) {
-			return ctx.getAppPath(IndexConstants.WIKIVOYAGE_INDEX_DIR);
+			return app.getAppPath(IndexConstants.WIKIVOYAGE_INDEX_DIR);
 		} else if (LIVE_UPDATES_FILE == this) {
-			return ctx.getAppPath(IndexConstants.LIVE_INDEX_DIR);
+			return app.getAppPath(IndexConstants.LIVE_INDEX_DIR);
 		} else if (HILLSHADE_FILE == this) {
-			return ctx.getAppPath(IndexConstants.TILES_INDEX_DIR);
+			return app.getAppPath(IndexConstants.TILES_INDEX_DIR);
 		} else if (SLOPE_FILE == this) {
-			return ctx.getAppPath(IndexConstants.TILES_INDEX_DIR);
-		} else if (HEIGHTMAP_FILE_LEGACY == this) {
-			return ctx.getAppPath(IndexConstants.HEIGHTMAP_INDEX_DIR);
+			return app.getAppPath(IndexConstants.TILES_INDEX_DIR);
 		} else if (GEOTIFF_FILE == this) {
-			return ctx.getAppPath(IndexConstants.GEOTIFF_DIR);
+			return app.getAppPath(IndexConstants.GEOTIFF_DIR);
 		} else if (DEPTH_CONTOUR_FILE == this) {
-			return ctx.getAppPath(IndexConstants.MAPS_PATH);
+			return app.getAppPath(IndexConstants.MAPS_PATH);
 		} else if (GPX_FILE == this) {
-			return ctx.getAppPath(IndexConstants.GPX_INDEX_DIR);
+			return app.getAppPath(IndexConstants.GPX_INDEX_DIR);
 		} else if (SQLITE_FILE == this) {
-			return ctx.getAppPath(IndexConstants.TILES_INDEX_DIR);
+			return app.getAppPath(IndexConstants.TILES_INDEX_DIR);
 		} else if (DEPTH_MAP_FILE == this) {
-			return ctx.getAppPath(IndexConstants.NAUTICAL_INDEX_DIR);
+			return app.getAppPath(IndexConstants.NAUTICAL_INDEX_DIR);
 		} else if (WEATHER_FORECAST == this) {
-			return ctx.getAppPath(WEATHER_FORECAST_DIR);
+			return app.getAppPath(WEATHER_FORECAST_DIR);
 		}
 		throw new UnsupportedOperationException();
 	}
@@ -224,7 +233,6 @@ public class DownloadActivityType {
 	public boolean isZipStream() {
 		return HILLSHADE_FILE != this
 				&& SLOPE_FILE != this
-				&& HEIGHTMAP_FILE_LEGACY != this
 				&& GEOTIFF_FILE != this
 				&& SQLITE_FILE != this
 				&& WIKIVOYAGE_FILE != this
@@ -274,8 +282,6 @@ public class DownloadActivityType {
 			return IndexConstants.SQLITE_EXT;
 		} else if (SQLITE_FILE == this) {
 			return IndexConstants.SQLITE_EXT;
-		} else if (HEIGHTMAP_FILE_LEGACY == this) {
-			return IndexConstants.HEIGHTMAP_SQLITE_EXT;
 		} else if (GEOTIFF_FILE == this) {
 			return IndexConstants.TIF_EXT;
 		} else if (DEPTH_CONTOUR_FILE == this) {
@@ -313,16 +319,18 @@ public class DownloadActivityType {
 			return "&inapp=depth";
 		} else if (this == GPX_FILE) {
 			return "&gpx=yes";
-		} else if (this == HEIGHTMAP_FILE_LEGACY || this == GEOTIFF_FILE) {
+		} else if (this == GEOTIFF_FILE) {
 			return "&heightmap=yes";
 		} else if (this == DEPTH_MAP_FILE) {
 			return "&depth=yes";
+		} else if (this == WEATHER_FORECAST) {
+			return "&weather=yes";
 		}
 		return "";
 	}
 
 	public String getBaseUrl(OsmandApplication ctx, String fileName) {
-		String url = "https://" + IndexConstants.INDEX_DOWNLOAD_DOMAIN + "/download?event=2&"
+		String url = AndroidNetworkUtils.getHttpProtocol() + INDEX_DOWNLOAD_DOMAIN + "/download?event=2&"
 				+ Version.getVersionAsURLParam(ctx) + "&file=" + encode(fileName);
 		if (this == LIVE_UPDATES_FILE && fileName.length() > 16) {
 			// DATE_AND_EXT_STR_LEN = "_18_06_02.obf.gz".length()
@@ -347,13 +355,14 @@ public class DownloadActivityType {
 			return null;
 		}
 		String size = parser.getAttributeValue(null, "size");
+		boolean isHidden = Boolean.parseBoolean(parser.getAttributeValue(null, "isHidden"));
 		String description = parser.getAttributeValue(null, "description");
 		long containerSize = Algorithms.parseLongSilently(parser.getAttributeValue(null, "containerSize"), 0);
 		long contentSize = Algorithms.parseLongSilently(parser.getAttributeValue(null, "contentSize"), 0);
 		long timestamp = Algorithms.parseLongSilently(parser.getAttributeValue(null, "timestamp"), 0);
 		boolean free = Boolean.parseBoolean(parser.getAttributeValue(null, "free"));
 		String freeMessage = parser.getAttributeValue(null, "freeMessage");
-		IndexItem item = new IndexItem(name, description, timestamp, size, contentSize, containerSize, this, free, freeMessage);
+		IndexItem item = new IndexItem(name, description, timestamp, size, contentSize, containerSize, this, free, freeMessage, isHidden);
 		item.extra = FileNameTranslationHelper.getStandardMapName(app, item.getBasename().toLowerCase()) != null;
 		return item;
 	}
@@ -468,8 +477,6 @@ public class DownloadActivityType {
 			return fileName.replace('_', ' ');
 		} else if (this == SLOPE_FILE) {
 			return fileName.replace('_', ' ');
-		} else if (this == HEIGHTMAP_FILE_LEGACY) {
-			return fileName.replace('_', ' ').replace(".heightmap", "");
 		} else if (this == GEOTIFF_FILE) {
 			return fileName.replace('_', ' ');
 		} else if (this == SQLITE_FILE) {
@@ -480,6 +487,9 @@ public class DownloadActivityType {
 				l = fileName.length();
 			}
 			return fileName.substring(0, l) + IndexConstants.BINARY_MAP_INDEX_EXT;
+		} else if (this == WEATHER_FORECAST) {
+			return fileName.substring(0, fileName.length() - ZIP_EXT.length())
+					.replace(FileNameTranslationHelper.WEATHER + "_", "");
 		} else if (fileName.endsWith(IndexConstants.BINARY_MAP_INDEX_EXT)
 				|| fileName.endsWith(IndexConstants.BINARY_MAP_INDEX_EXT_ZIP)) {
 			int l = fileName.lastIndexOf('_');
@@ -532,11 +542,6 @@ public class DownloadActivityType {
 			return fileName.substring(0, fileName.length() - IndexConstants.SQLITE_EXT.length())
 					.replace(FileNameTranslationHelper.SLOPE + "_", "");
 		}
-		if (this == HEIGHTMAP_FILE_LEGACY) {
-			String heightmapSuffix = ".heightmap" + IndexConstants.HEIGHTMAP_SQLITE_EXT;
-			return fileName.substring(0, fileName.length() - heightmapSuffix.length())
-					.replace(FileNameTranslationHelper.HEIGHTMAP + "_", "");
-		}
 		if (this == GEOTIFF_FILE) {
 			return fileName.substring(0, fileName.length() - IndexConstants.TIF_EXT.length())
 					.replace(FileNameTranslationHelper.HEIGHTMAP + "_", "");
@@ -570,8 +575,8 @@ public class DownloadActivityType {
 			return fileName;
 		}
 		if (this == WEATHER_FORECAST) {
-			int ls = fileName.lastIndexOf(WEATHER_EXT);
-			return ls >= 0 ? fileName.substring(0, ls) : fileName;
+			return fileName.substring(0, fileName.length() - WEATHER_MAP_INDEX_EXT.length())
+					.replace(FileNameTranslationHelper.WEATHER + "_", "");
 		}
 		int ls = fileName.lastIndexOf('_');
 		if (ls >= 0) {

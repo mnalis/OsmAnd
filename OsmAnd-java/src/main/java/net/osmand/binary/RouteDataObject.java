@@ -1,9 +1,13 @@
 package net.osmand.binary;
 
-import java.util.Arrays;
+import static net.osmand.router.GeneralRouter.*;
 
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 import gnu.trove.map.hash.TIntObjectHashMap;
+
 import net.osmand.Location;
 import net.osmand.binary.BinaryMapRouteReaderAdapter.RouteRegion;
 import net.osmand.binary.BinaryMapRouteReaderAdapter.RouteTypeRule;
@@ -324,7 +328,7 @@ public class RouteDataObject {
 				int k = kt[i];
 				if (region.routeEncodingRules.size() > k) {
 					if (refTag.equals(region.routeEncodingRules.get(k).getTag())) {
-						return names.get(k);
+						return Algorithms.splitAndClearRepeats(names.get(k), ";");
 					}
 					if (refTagDefault.equals(region.routeEncodingRules.get(k).getTag())) {
 						refDefault = names.get(k);
@@ -332,7 +336,7 @@ public class RouteDataObject {
 				}
 			}
 			if (refDefault != null) {
-				return refDefault;
+				return Algorithms.splitAndClearRepeats(refDefault, ";");
 			}
 			//return names.get(region.refTypeRule);
 		}
@@ -341,45 +345,33 @@ public class RouteDataObject {
 
 	public String getDestinationName(String lang, boolean transliterate, boolean direction) {
 		if (names != null) {
-			int[] kt = names.keys();
-
-			// Issue #3181: Parse destination keys in this order:
-			//              destination:lang:XX:forward/backward
-			//              destination:forward/backward
-			//              destination:lang:XX
-			//              destination
-
-			String destinationTagLangFB = "destination:lang:XX";
+			int[] nameKeys = names.keys();
+			Map<String, Integer> tagPriorities = new HashMap<>();
+			int tagPriority = 1;
 			if (!Algorithms.isEmpty(lang)) {
-				destinationTagLangFB = (direction == true) ? "destination:lang:" + lang + ":forward" : "destination:lang:" + lang + ":backward";
+				tagPriorities.put("destination:lang:" + lang + (direction ? ":forward" : ":backward"), tagPriority++);
 			}
-			String destinationTagFB = (direction == true) ? "destination:forward" : "destination:backward";
-			String destinationTagLang = "destination:lang:XX";
+			tagPriorities.put("destination:" + (direction ? "forward" : "backward"), tagPriority++);
 			if (!Algorithms.isEmpty(lang)) {
-				destinationTagLang = "destination:lang:" + lang;
+				tagPriorities.put("destination:lang:" + lang, tagPriority++);
 			}
-			String destinationTagDefault = "destination";
-			String destinationDefault = null;
+			tagPriorities.put("destination", tagPriority);
 
-			for (int i = 0; i < kt.length; i++) {
-				int k = kt[i];
-				if (region.routeEncodingRules.size() > k) {
-					if (!Algorithms.isEmpty(lang) && destinationTagLangFB.equals(region.routeEncodingRules.get(k).getTag())) {
-						return (transliterate) ? TransliterationHelper.transliterate(names.get(k)) : names.get(k);
-					}
-					if (destinationTagFB.equals(region.routeEncodingRules.get(k).getTag())) {
-						return (transliterate) ? TransliterationHelper.transliterate(names.get(k)) : names.get(k);
-					}
-					if (!Algorithms.isEmpty(lang) && destinationTagLang.equals(region.routeEncodingRules.get(k).getTag())) {
-						return (transliterate) ? TransliterationHelper.transliterate(names.get(k)) : names.get(k);
-					}
-					if (destinationTagDefault.equals(region.routeEncodingRules.get(k).getTag())) {
-						destinationDefault = names.get(k);
+			int highestPriorityNameKey = -1;
+			int highestPriority = Integer.MAX_VALUE;
+			for (int nameKey : nameKeys) {
+				if (region.routeEncodingRules.size() > nameKey) {
+					String tag = region.routeEncodingRules.get(nameKey).getTag();
+					Integer priority = tagPriorities.get(tag);
+					if (priority != null && priority < highestPriority) {
+						highestPriority = priority;
+						highestPriorityNameKey = nameKey;
 					}
 				}
 			}
-			if (destinationDefault != null) {
-				return (transliterate) ? TransliterationHelper.transliterate(destinationDefault) : destinationDefault;
+			if (highestPriorityNameKey > 0) {
+				String name = names.get(highestPriorityNameKey);
+				return transliterate ? TransliterationHelper.transliterate(name) : name;
 			}
 		}
 		return "";
@@ -389,8 +381,16 @@ public class RouteDataObject {
 		return pointsX[i];
 	}
 
+	public int getPoint31XTile(int s, int e) {
+		return pointsX[s] / 2 + pointsX[e] / 2;
+	}
+
 	public int getPoint31YTile(int i) {
 		return pointsY[i];
+	}
+	
+	public int getPoint31YTile(int s, int e) {
+		return pointsY[s] / 2 + pointsY[e] / 2;
 	}
 
 	public int getPointsLength() {
@@ -531,68 +531,6 @@ public class RouteDataObject {
 		return types;
 	}
 
-	public void processConditionalTags(long conditionalTime) {
-		int sz = types.length;
-		for (int i = 0; i < sz; i++) {
-			RouteTypeRule r = region.quickGetEncodingRule(types[i]);
-			if (r != null && r.conditional()) {
-				int vl = r.conditionalValue(conditionalTime);
-				if (vl != 0) {
-					RouteTypeRule rtr = region.quickGetEncodingRule(vl);
-					String nonCondTag = rtr.getTag();
-					int ks;
-					for (ks = 0; ks < types.length; ks++) {
-						RouteTypeRule toReplace = region.quickGetEncodingRule(types[ks]);
-						if (toReplace != null && toReplace.getTag().equals(nonCondTag)) {
-							break;
-						}
-					}
-					if (ks == types.length) {
-						int[] ntypes = new int[types.length + 1];
-						System.arraycopy(types, 0, ntypes, 0, types.length);
-						types = ntypes;
-					}
-					types[ks] = vl;
-				}
-			}
-		}
-
-		if (pointTypes != null) {
-			for (int i = 0; i < pointTypes.length; i++) {
-				if (pointTypes[i] != null) {
-					int[] pTypes = pointTypes[i];
-					int pSz = pTypes.length;
-					if (pSz > 0) {
-						for (int j = 0; j < pSz; j++) {
-							RouteTypeRule r = region.quickGetEncodingRule(pTypes[j]);
-							if (r != null && r.conditional()) {
-								int vl = r.conditionalValue(conditionalTime);
-								if (vl != 0) {
-									RouteTypeRule rtr = region.quickGetEncodingRule(vl);
-									String nonCondTag = rtr.getTag();
-									int ks;
-									for (ks = 0; ks < pointTypes[i].length; ks++) {
-										RouteTypeRule toReplace = region.quickGetEncodingRule(pointTypes[i][ks]);
-										if (toReplace != null && toReplace.getTag().contentEquals(nonCondTag)) {
-											break;
-										}
-									}
-									if (ks == pTypes.length) {
-										int[] ntypes = new int[pTypes.length + 1];
-										System.arraycopy(pTypes, 0, ntypes, 0, pTypes.length);
-										pTypes = ntypes;
-									}
-									pTypes[ks] = vl;
-								}
-							}
-						}
-					}
-					pointTypes[i] = pTypes;
-				}
-			}
-		}
-	}
-
 	public float getMaximumSpeed(boolean direction) {
 		return getMaximumSpeed(direction, RouteTypeRule.PROFILE_NONE);
 	}
@@ -677,10 +615,6 @@ public class RouteDataObject {
 		return def;
 	}
 
-	public boolean loop() {
-		return pointsX[0] == pointsX[pointsX.length - 1] && pointsY[0] == pointsY[pointsY.length - 1];
-	}
-
 	public boolean platform() {
 		int sz = types.length;
 		for (int i = 0; i < sz; i++) {
@@ -700,8 +634,6 @@ public class RouteDataObject {
 		for (int i = 0; i < sz; i++) {
 			RouteTypeRule r = region.quickGetEncodingRule(types[i]);
 			if (r.roundabout()) {
-				return true;
-			} else if (r.onewayDirection() != 0 && loop()) {
 				return true;
 			}
 		}
@@ -827,16 +759,17 @@ public class RouteDataObject {
 		return getHighway(types, region);
 	}
 
-	public boolean hasPrivateAccess() {
-		int sz = types.length;
-		for (int i = 0; i < sz; i++) {
-			RouteTypeRule r = region.quickGetEncodingRule(types[i]);
-			if ("motorcar".equals(r.getTag())
-					|| "motor_vehicle".equals(r.getTag())
-					|| "vehicle".equals(r.getTag())
-					|| "access".equals(r.getTag())) {
-				if (r.getValue().equals("private")) {
+	public boolean hasPrivateAccess(GeneralRouterProfile profile) {
+		for (int type : types) {
+			RouteTypeRule rule = region.quickGetEncodingRule(type);
+			String tag = rule.getTag();
+			if (rule.getValue().equals("private")) {
+				if ("vehicle".equals(tag) || "access".equals(tag)) {
 					return true;
+				} else if (profile == GeneralRouterProfile.CAR) {
+					return "motorcar".equals(tag) || "motor_vehicle".equals(tag);
+				} else if (profile == GeneralRouterProfile.BICYCLE) {
+					return "bicycle".equals(tag);
 				}
 			}
 		}
@@ -1011,42 +944,6 @@ public class RouteDataObject {
 
 	private double simplifyDistance(int x, int y, int px, int py) {
 		return Math.abs(px - x) * 0.011d + Math.abs(py - y) * 0.01863d;
-	}
-
-	private static void assertTrueLength(String vl, float exp) {
-		float dest = parseLength(vl, 0);
-		if (exp != dest) {
-			System.err.println("FAIL " + vl + " " + dest);
-		} else {
-			System.out.println("OK " + vl);
-		}
-	}
-
-	public static void main(String[] args) {
-		assertTrueLength("10 km", 10000);
-		assertTrueLength("0.01 km", 10);
-		assertTrueLength("0.01 km 10 m", 20);
-		assertTrueLength("10 m", 10);
-		assertTrueLength("10m", 10);
-		assertTrueLength("3.4 m", 3.4f);
-		assertTrueLength("3.40 m", 3.4f);
-		assertTrueLength("10 m 10m", 20);
-		assertTrueLength("14'10\"", 4.5212f);
-		assertTrueLength("14.5'", 4.4196f);
-		assertTrueLength("14.5 ft", 4.4196f);
-		assertTrueLength("14'0\"", 4.2672f);
-		assertTrueLength("15ft", 4.572f);
-		assertTrueLength("15 ft 1 in", 4.5974f);
-		assertTrueLength("4.1 metres", 4.1f);
-		assertTrueLength("14'0''", 4.2672f);
-		assertTrueLength("14 feet", 4.2672f);
-		assertTrueLength("14 mile", 22530.76f);
-		assertTrueLength("14 cm", 0.14f);
-
-// 		float badValue = -1;
-// 		assertTrueLength("none", badValue);
-// 		assertTrueLength("m 4.1", badValue);
-// 		assertTrueLength("1F4 m", badValue);
 	}
 
 	public String coordinates() {

@@ -1,9 +1,12 @@
 package net.osmand.data;
 
+import net.osmand.util.MapUtils;
+
 import java.io.Serializable;
 
 public class LatLon implements Serializable {
 
+	private static final long serialVersionUID = 1811582709897737392L;
 	private final double latitude;
 	private final double longitude;
 
@@ -42,8 +45,7 @@ public class LatLon implements Serializable {
 			return false;
 
 		LatLon other = (LatLon) obj;
-		return Math.abs(latitude - other.latitude) < 0.00001
-				&& Math.abs(longitude - other.longitude) < 0.00001;
+		return MapUtils.areLatLonEqual(this, other);
 	}
 
 	@Override

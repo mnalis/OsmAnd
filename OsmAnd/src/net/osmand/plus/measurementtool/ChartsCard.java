@@ -1,9 +1,9 @@
 package net.osmand.plus.measurementtool;
 
 import static net.osmand.plus.charts.GPXDataSetType.ALTITUDE;
-import static net.osmand.plus.charts.GPXDataSetType.SENSOR_HEART_RATE;
 import static net.osmand.plus.charts.GPXDataSetType.SLOPE;
 import static net.osmand.plus.charts.GPXDataSetType.SPEED;
+import static net.osmand.plus.mapcontextmenu.other.TrackDetailsMenu.ChartPointLayer.MEASUREMENT_TOOL;
 import static net.osmand.router.RouteStatisticsHelper.RouteStatistics;
 
 import android.annotation.SuppressLint;
@@ -21,21 +21,21 @@ import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.github.mikephil.charting.charts.ElevationChart;
 import com.github.mikephil.charting.charts.HorizontalBarChart;
-import com.github.mikephil.charting.charts.LineChart;
 import com.github.mikephil.charting.data.BarData;
 import com.github.mikephil.charting.data.ChartData;
 import com.github.mikephil.charting.data.LineData;
 import com.github.mikephil.charting.interfaces.datasets.ILineDataSet;
 
-import net.osmand.gpx.GPXFile;
-import net.osmand.gpx.GPXTrackAnalysis;
+import net.osmand.shared.gpx.GpxFile;
+import net.osmand.shared.gpx.GpxTrackAnalysis;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
+import net.osmand.plus.charts.ChartUtils;
+import net.osmand.plus.charts.GPXDataSetType;
 import net.osmand.plus.helpers.AndroidUiHelper;
-import net.osmand.plus.track.helpers.GpxUiHelper;
 import net.osmand.plus.mapcontextmenu.other.TrackDetailsMenu;
-import net.osmand.plus.mapcontextmenu.other.TrackDetailsMenu.ChartPointLayer;
 import net.osmand.plus.measurementtool.MeasurementToolFragment.OnUpdateInfoListener;
 import net.osmand.plus.measurementtool.graph.ChartAdapterHelper;
 import net.osmand.plus.measurementtool.graph.ChartAdapterHelper.RefreshMapCallback;
@@ -46,9 +46,8 @@ import net.osmand.plus.myplaces.tracks.GPXTabItemType;
 import net.osmand.plus.routepreparationmenu.RouteDetailsFragment;
 import net.osmand.plus.routepreparationmenu.cards.MapBaseCard;
 import net.osmand.plus.track.helpers.GpxDisplayItem;
+import net.osmand.plus.track.helpers.GpxUiHelper;
 import net.osmand.plus.utils.AndroidUtils;
-import net.osmand.plus.charts.ChartUtils;
-import net.osmand.plus.charts.GPXDataSetType;
 import net.osmand.plus.utils.ColorUtilities;
 import net.osmand.plus.widgets.chips.ChipItem;
 import net.osmand.plus.widgets.chips.HorizontalChipsView;
@@ -69,7 +68,7 @@ public class ChartsCard extends MapBaseCard implements OnUpdateInfoListener {
 
 	private MeasurementEditingContext editingCtx;
 	private RefreshMapCallback refreshMapCallback;
-	private GPXTrackAnalysis analysis;
+	private GpxTrackAnalysis analysis;
 	private GpxDisplayItem gpxItem;
 
 	private OnScrollChangedListener scrollChangedListener;
@@ -105,7 +104,7 @@ public class ChartsCard extends MapBaseCard implements OnUpdateInfoListener {
 
 		setupScrollListener();
 
-		LineChart lineChart = view.findViewById(R.id.line_chart);
+		ElevationChart lineChart = view.findViewById(R.id.line_chart);
 		HorizontalBarChart barChart = view.findViewById(R.id.horizontal_chart);
 		commonGraphAdapter = new CommonChartAdapter(app, lineChart, true);
 		customGraphAdapter = new CustomChartAdapter(app, barChart, true);
@@ -290,11 +289,11 @@ public class ChartsCard extends MapBaseCard implements OnUpdateInfoListener {
 			int progressSize = app.getResources().getDimensionPixelSize(R.dimen.icon_size_double);
 			String buttonText = app.getString(R.string.shared_string_cancel);
 			showMessage(null, desc, INVALID_ID, progressSize);
-			showButton(buttonText, v -> fragment.stopCalculatingHeightMapTask(), true);
+			showButton(buttonText, v -> fragment.stopCalculatingHeightMapTask(true), true);
 		} else if (visibleType.canBeCalculated() && !visibleType.hasData()) {
 			String title = app.getString(R.string.no_altitude_data);
-			String desc = app.getString(R.string.no_altitude_data_desc, visibleType.getTitle());
-			showMessage(title, desc, R.drawable.ic_action_altitude_average, 0);
+			String desc = app.getString(R.string.retrieve_elevation_data_summary);
+			showMessage(title, desc, R.drawable.ic_action_desert, 0);
 			showCalculateAltitudeButton(true);
 		} else if (visibleType.hasData()) {
 			showGraph();
@@ -305,7 +304,7 @@ public class ChartsCard extends MapBaseCard implements OnUpdateInfoListener {
 	}
 
 	private void showCalculateAltitudeButton(boolean addStartPadding) {
-		showButton(app.getString(R.string.calculate_altitude), v -> fragment.getAltitudeClick(), addStartPadding);
+		showButton(app.getString(R.string.get_altitude_data), v -> fragment.getAltitudeClick(), addStartPadding);
 	}
 
 	private void showMessage(@Nullable String title,
@@ -343,7 +342,7 @@ public class ChartsCard extends MapBaseCard implements OnUpdateInfoListener {
 
 		View buttonDivider = buttonContainer.findViewById(R.id.button_divider);
 		MarginLayoutParams layoutParams = (MarginLayoutParams) buttonDivider.getLayoutParams();
-		layoutParams.setMarginStart(addStartPadding ? getDimen(R.dimen.content_padding) : 0);
+		layoutParams.setMarginStart(addStartPadding ? getDimen(R.dimen.list_content_padding_large) : 0);
 		buttonDivider.setLayoutParams(layoutParams);
 
 		TextView title = buttonContainer.findViewById(R.id.btn_text);
@@ -370,11 +369,11 @@ public class ChartsCard extends MapBaseCard implements OnUpdateInfoListener {
 
 	private void updateData() {
 		chartTypes.clear();
-		GPXFile gpxFile = getGpxFile();
-		analysis = gpxFile != null ? gpxFile.getAnalysis(0) : null;
-		gpxItem = gpxFile != null
-				? GpxUiHelper.makeGpxDisplayItem(app, gpxFile, ChartPointLayer.MEASUREMENT_TOOL)
-				: null;
+
+		GpxFile gpxFile = fragment.generateGpxFile();
+		analysis = gpxFile.getAnalysis(0);
+		gpxItem = GpxUiHelper.makeGpxDisplayItem(app, gpxFile, MEASUREMENT_TOOL, analysis);
+
 		if (gpxItem != null) {
 			trackDetailsMenu.setGpxItem(gpxItem);
 		}
@@ -426,15 +425,6 @@ public class ChartsCard extends MapBaseCard implements OnUpdateInfoListener {
 					break;
 				}
 			}
-		}
-	}
-
-	private GPXFile getGpxFile() {
-		if (fragment.isTrackReadyToCalculate()) {
-			return editingCtx.exportGpx(GRAPH_DATA_GPX_FILE_NAME);
-		} else {
-			GpxData gpxData = editingCtx.getGpxData();
-			return gpxData != null ? gpxData.getGpxFile() : null;
 		}
 	}
 
@@ -509,7 +499,7 @@ public class ChartsCard extends MapBaseCard implements OnUpdateInfoListener {
 
 		@Override
 		public LineData getChartData() {
-			ChartUtils.setupGPXChart(commonGraphAdapter.getChart(), 24f, 16f, true);
+			ChartUtils.setupElevationChart(commonGraphAdapter.getChart());
 			List<ILineDataSet> dataSets = ChartUtils.getDataSets(commonGraphAdapter.getChart(),
 					app, analysis, firstType, secondType, false);
 			return new LineData(dataSets);

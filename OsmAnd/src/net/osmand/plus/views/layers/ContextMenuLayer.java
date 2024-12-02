@@ -148,8 +148,8 @@ public class ContextMenuLayer extends OsmandMapLayer {
 	public void initLayer(@NonNull OsmandMapTileView view) {
 		super.initLayer(view);
 
-		Context context = getContext();
-		contextMarker = new ImageView(context);
+		Context context = AndroidUtils.createDisplayContext(getContext());
+		contextMarker = new ImageView(AndroidUtils.createDisplayContext(context));
 		contextMarker.setLayoutParams(new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
 		Drawable markerDrawable = AppCompatResources.getDrawable(context, R.drawable.map_pin_context_menu);
 		contextMarker.setImageDrawable(markerDrawable);
@@ -173,6 +173,12 @@ public class ContextMenuLayer extends OsmandMapLayer {
 		int height = (int) (contextMarker.getDrawable().getMinimumHeight() * scale);
 		contextMarker.layout(0, 0, width, height);
 		contextMarkerImage = getScaledBitmap(R.drawable.map_pin_context_menu, scale);
+	}
+
+	@Override
+	protected void updateResources() {
+		super.updateResources();
+		updateContextMarker();
 	}
 
 	public Object getSelectedObject() {
@@ -278,7 +284,7 @@ public class ContextMenuLayer extends OsmandMapLayer {
 		}
 
 		boolean movingMarker = mapQuickActionLayer != null && mapQuickActionLayer.isInMovingMarkerMode();
-		boolean downloadingTiles = mapActivity.getDownloadTilesFragment() != null;
+		boolean downloadingTiles = mapActivity.getFragmentsHelper().getDownloadTilesFragment() != null;
 		if (movingMarker || downloadingTiles) {
 			return;
 		}
@@ -302,8 +308,8 @@ public class ContextMenuLayer extends OsmandMapLayer {
 			LatLon latLon = null;
 			if (menu != null && menu.isActive()) {
 				latLon = menu.getLatLon();
-			} else if (mapActivity.getTrackMenuFragment() != null) {
-				latLon = mapActivity.getTrackMenuFragment().getLatLon();
+			} else if (mapActivity.getFragmentsHelper().getTrackMenuFragment() != null) {
+				latLon = mapActivity.getFragmentsHelper().getTrackMenuFragment().getLatLon();
 			}
 			if (latLon != null) {
 				if (hasMapRenderer) {
@@ -695,7 +701,7 @@ public class ContextMenuLayer extends OsmandMapLayer {
 			if (mAddGpxPointBottomSheetHelper != null) {
 				mAddGpxPointBottomSheetHelper.setTitle(title);
 			}
-			view.getAnimatedDraggingThread().startMoving(latLon.getLatitude(), latLon.getLongitude(), view.getZoom(), true);
+			view.getAnimatedDraggingThread().startMoving(latLon.getLatitude(), latLon.getLongitude(), view.getZoom());
 		} else if (provider == null || !provider.showMenuAction(object)) {
 			selectedObjectContextMenuProvider = provider;
 			hideVisibleMenues();
@@ -740,7 +746,7 @@ public class ContextMenuLayer extends OsmandMapLayer {
 			if (mInAddGpxPointMode) {
 				String title = pointDescription == null ? "" : pointDescription.getName();
 				mAddGpxPointBottomSheetHelper.setTitle(title);
-				view.getAnimatedDraggingThread().startMoving(latLon.getLatitude(), latLon.getLongitude(), view.getZoom(), true);
+				view.getAnimatedDraggingThread().startMoving(latLon.getLatitude(), latLon.getLongitude(), view.getZoom());
 			} else {
 				showContextMenu(latLon, pointDescription, selectedObj, provider);
 			}
@@ -754,7 +760,7 @@ public class ContextMenuLayer extends OsmandMapLayer {
 			getApplication().getMapViewTrackingUtilities().setMapLinkedToLocation(false);
 			if (mInAddGpxPointMode) {
 				mAddGpxPointBottomSheetHelper.setTitle("");
-				view.getAnimatedDraggingThread().startMoving(pointLatLon.getLatitude(), pointLatLon.getLongitude(), view.getZoom(), true);
+				view.getAnimatedDraggingThread().startMoving(pointLatLon.getLatitude(), pointLatLon.getLongitude(), view.getZoom());
 			} else {
 				menu.show(pointLatLon, null, null);
 			}
@@ -789,8 +795,8 @@ public class ContextMenuLayer extends OsmandMapLayer {
 		if (mInChangeMarkerPositionMode || mInGpxDetailsMode || mInAddGpxPointMode
 				|| mapActivity == null || mapActivity.getMapRouteInfoMenu().isVisible()
 				|| MapRouteInfoMenu.waypointsVisible || MapRouteInfoMenu.followTrackVisible
-				|| mapActivity.getGpsFilterFragment() != null
-				|| mapActivity.getDownloadTilesFragment() != null
+				|| mapActivity.getFragmentsHelper().getGpsFilterFragment() != null
+				|| mapActivity.getFragmentsHelper().getDownloadTilesFragment() != null
 				|| (plugin != null && plugin.hasCustomForecast())) {
 			return true;
 		}
@@ -837,8 +843,8 @@ public class ContextMenuLayer extends OsmandMapLayer {
 	public boolean onSingleTap(@NonNull PointF point, @NonNull RotatedTileBox tileBox) {
 		MapActivity mapActivity = getMapActivity();
 		if (mapActivity == null || menu == null || mInChangeMarkerPositionMode || mInGpxDetailsMode
-				|| mapActivity.getGpsFilterFragment() != null
-				|| mapActivity.getDownloadTilesFragment() != null) {
+				|| mapActivity.getFragmentsHelper().getGpsFilterFragment() != null
+				|| mapActivity.getFragmentsHelper().getDownloadTilesFragment() != null) {
 			return true;
 		}
 
@@ -889,8 +895,8 @@ public class ContextMenuLayer extends OsmandMapLayer {
 
 	private boolean hideVisibleMenues() {
 		MapActivity mapActivity = getMapActivity();
-		if (mapActivity != null && mapActivity.getTrackMenuFragment() != null) {
-			mapActivity.getTrackMenuFragment().dismiss();
+		if (mapActivity != null && mapActivity.getFragmentsHelper().getTrackMenuFragment() != null) {
+			mapActivity.getFragmentsHelper().getTrackMenuFragment().dismiss();
 			MapActivity.clearPrevActivityIntent();
 			return true;
 		}
@@ -954,13 +960,21 @@ public class ContextMenuLayer extends OsmandMapLayer {
 
 		PointDescription getObjectName(Object o);
 
-		boolean disableSingleTap();
+		default boolean disableSingleTap() {
+			return false;
+		}
 
-		boolean disableLongPressOnMap(PointF point, RotatedTileBox tileBox);
+		default boolean disableLongPressOnMap(PointF point, RotatedTileBox tileBox) {
+			return false;
+		}
 
-		boolean runExclusiveAction(@Nullable Object o, boolean unknownLocation);
+		default boolean runExclusiveAction(@Nullable Object o, boolean unknownLocation) {
+			return false;
+		}
 
-		boolean showMenuAction(@Nullable Object o);
+		default boolean showMenuAction(@Nullable Object o) {
+			return false;
+		}
 	}
 
 	public interface IMoveObjectProvider {

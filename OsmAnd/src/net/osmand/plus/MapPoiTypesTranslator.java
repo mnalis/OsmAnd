@@ -7,6 +7,8 @@ import androidx.annotation.NonNull;
 import net.osmand.PlatformUtil;
 import net.osmand.osm.AbstractPoiType;
 import net.osmand.osm.MapPoiTypes.PoiTranslator;
+import net.osmand.plus.plugins.PluginsHelper;
+import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.util.Algorithms;
 
 import org.apache.commons.logging.Log;
@@ -30,14 +32,14 @@ public class MapPoiTypesTranslator implements PoiTranslator {
 		AbstractPoiType baseLangType = type.getBaseLangType();
 		if (baseLangType != null) {
 			String translation = getTranslation(baseLangType);
-			String langTranslation = " (" + app.getLangTranslation(type.getLang()).toLowerCase() + ")";
+			String langTranslation = " (" + AndroidUtils.getLangTranslation(app, type.getLang()).toLowerCase() + ")";
 			if (translation != null) {
 				return translation + langTranslation;
 			} else {
 				return app.poiTypes.getBasePoiName(baseLangType) + langTranslation;
 			}
 		}
-		return getTranslation(type.getIconKeyName());
+		return getTranslation(type.getFormattedKeyName());
 	}
 
 	@Override
@@ -56,7 +58,9 @@ public class MapPoiTypesTranslator implements PoiTranslator {
 				return val;
 			}
 		} catch (Throwable e) {
-			LOG.info("No translation: " + keyName);
+			if (PluginsHelper.isDevelopment()) {
+				LOG.info("No translation: " + keyName);
+			}
 		}
 		return null;
 	}
@@ -67,7 +71,7 @@ public class MapPoiTypesTranslator implements PoiTranslator {
 		if (baseLangType != null) {
 			return getSynonyms(baseLangType);
 		}
-		return getSynonyms(type.getIconKeyName());
+		return getSynonyms(type.getFormattedKeyName());
 	}
 
 	@Override
@@ -87,7 +91,9 @@ public class MapPoiTypesTranslator implements PoiTranslator {
 				return val;
 			}
 		} catch (Exception e) {
-			LOG.info("No synonyms: " + keyName);
+			if (PluginsHelper.isDevelopment()) {
+				LOG.info("No synonyms: " + keyName);
+			}
 		}
 		return "";
 	}
@@ -101,9 +107,9 @@ public class MapPoiTypesTranslator implements PoiTranslator {
 	public String getEnTranslation(AbstractPoiType type) {
 		AbstractPoiType baseLangType = type.getBaseLangType();
 		if (baseLangType != null) {
-			return getEnTranslation(baseLangType) + " (" + app.getLangTranslation(type.getLang()).toLowerCase() + ")";
+			return getEnTranslation(baseLangType) + " (" + AndroidUtils.getLangTranslation(app, type.getLang()).toLowerCase() + ")";
 		}
-		return getEnTranslation(type.getIconKeyName());
+		return getEnTranslation(type.getFormattedKeyName());
 	}
 
 	@Override
@@ -125,7 +131,9 @@ public class MapPoiTypesTranslator implements PoiTranslator {
 				return val;
 			}
 		} catch (Exception e) {
-			LOG.info("No EnTranslation: " + keyName);
+			if (PluginsHelper.isDevelopment()) {
+				LOG.info("No EnTranslation: " + keyName);
+			}
 		}
 		return null;
 	}

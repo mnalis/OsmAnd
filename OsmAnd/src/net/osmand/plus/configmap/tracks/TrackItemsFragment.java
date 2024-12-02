@@ -17,6 +17,8 @@ import net.osmand.plus.OsmAndLocationProvider.OsmAndCompassListener;
 import net.osmand.plus.OsmAndLocationProvider.OsmAndLocationListener;
 import net.osmand.plus.R;
 import net.osmand.plus.base.BaseOsmAndFragment;
+import net.osmand.plus.track.BaseTracksTabsFragment;
+import net.osmand.shared.gpx.TrackItem;
 import net.osmand.util.MapUtils;
 
 import java.util.Set;
@@ -25,9 +27,9 @@ public class TrackItemsFragment extends BaseOsmAndFragment implements OsmAndComp
 
 	public static final String TAG = TrackItemsFragment.class.getSimpleName();
 
-	private static final String TRACK_TAB_NAME_KEY = "track_tab_name_key";
+	private static final String TRACK_TAB_ID_KEY = "track_tab_id_key";
 
-	private String trackTabName;
+	private String trackTabId;
 	private TracksAdapter adapter;
 	private RecyclerView recyclerView;
 
@@ -68,25 +70,26 @@ public class TrackItemsFragment extends BaseOsmAndFragment implements OsmAndComp
 	}
 
 	private void setupAdapter(@NonNull TrackTab trackTab) {
-		TracksFragment fragment = (TracksFragment) requireParentFragment();
-		adapter = new TracksAdapter(app, trackTab, fragment, nightMode);
+		BaseTracksTabsFragment fragment = (BaseTracksTabsFragment) requireParentFragment();
+		adapter = new TracksAdapter(requireContext(), trackTab, fragment, nightMode);
+		adapter.setSelectionMode(fragment.selectionMode());
 		recyclerView.setAdapter(adapter);
 	}
 
 	@Nullable
 	public TrackTab getTrackTab() {
-		TracksFragment fragment = (TracksFragment) requireParentFragment();
-		return fragment.getTab(trackTabName);
+		BaseTracksTabsFragment fragment = (BaseTracksTabsFragment) requireParentFragment();
+		return fragment.getTab(trackTabId);
 	}
 
 	public void setTrackTab(@NonNull TrackTab trackTab) {
-		this.trackTabName = trackTab.getTypeName();
+		this.trackTabId = trackTab.getId();
 	}
 
 	@Override
-	public void onTrackItemsSelected(@NonNull Set<TrackItem> trackItems) {
+	public void updateItems(@NonNull Set<TrackItem> trackItems) {
 		if (adapter != null) {
-			adapter.onTrackItemsSelected(trackItems);
+			adapter.updateItems(trackItems);
 		}
 	}
 
@@ -115,7 +118,7 @@ public class TrackItemsFragment extends BaseOsmAndFragment implements OsmAndComp
 	@Override
 	public void onSaveInstanceState(@NonNull Bundle outState) {
 		super.onSaveInstanceState(outState);
-		outState.putString(TRACK_TAB_NAME_KEY, trackTabName);
+		outState.putString(TRACK_TAB_ID_KEY, trackTabId);
 	}
 
 	@Override

@@ -304,7 +304,7 @@
     <string name="backup_deleting_all_data">Se brišat site podatoci…</string>
     <string name="logout_from_osmand_cloud_decsr">Odjavuvanje\?
 \nḰe treba povtorno da se najavite za da napravite rezervna kopija ili da gi vratite podatocite.</string>
-    <string name="contour_lines_hillshades_slope">Konturni linii, ridovi, nagib</string>
+    <string name="contour_lines_hillshade_slope">Konturni linii, ridovi, nagib</string>
     <string name="backup_error_no_valid_subscription">Nema validna pretplata</string>
     <string name="backup_error_user_is_not_registered">Nitu eden korisnik ne e registriran so taa adresa na e-pošta</string>
     <string name="backup_error_token_is_not_valid_or_expired">Nevažečki ili istečen token</string>
@@ -336,10 +336,8 @@
     <string name="ltr_or_rtl_combine_via_or">%1$s ili %2$s</string>
     <string name="you_can_get_feature_as_part_of_pattern">Dobijte “%1$s” kako del od planot %2$s . Sporedba:</string>
     <string name="nautical_depth">Nautička dlabočina</string>
-    <string name="terrain_maps">Terenski karti</string>
     <string name="offline_wikivoyage">Oflajn Wikipatuvanje</string>
     <string name="offline_wikipeadia">Wkipedia oflajn</string>
-    <string name="terrain_maps_contour_lines_hillshade_slope">Karti na terenot: konturni linii, ridovi, nagib</string>
     <string name="wikipedia_and_wikivoyage_offline">Wkipedia i Wikipatuvanje oflajn</string>
     <string name="unlimited_map_downloads">Neograniceno simnuvanje na karti</string>
     <string name="purchases_feature_desc_monthly_map_updates">Dobijte pristap do redovnite mesečni ažuriranja za oflajn karti.</string>
@@ -889,7 +887,6 @@
     <string name="live_monitoring_time_buffer">Vremenski odbojmik</string>
     <string name="live_monitoring_tracking_interval">Interval na sledenje</string>
     <string name="live_monitoring_adress">Web addresa</string>
-    <string name="live_monitoring_adress_descr">Navedete ja veb-adresata so sintaksa na parametarot: lat={0}, lon={1}, timestamp={2}, hdop={3}, altitude={4}, speed={5}, bearing={6}.</string>
     <string name="monitoring_notification">Notifikacija</string>
     <string name="monitoring_min_speed">Minimalna brzina</string>
     <string name="monitoring_min_accuracy">Minimalna točnost</string>
@@ -1027,7 +1024,6 @@
     <string name="icon_group_transport">Transport</string>
     <string name="icon_group_special">Poesbno</string>
     <string name="icon_group_amenity">Udobnost</string>
-    <string name="ltr_or_rtl_combine_via_dash">%1$s — %2$s</string>
     <string name="shared_string_local_maps">Lokalni karti</string>
     <string name="osm_edit_logout_success">Odjaven</string>
     <string name="clear_osm_token">Isčistete go OpenStreetMap OAuth tokenot</string>
@@ -1271,7 +1267,6 @@
     <string name="quick_action_hillshade_descr">Kopče za prikažuvanje ili sokrivanje na ridovite na kartata.</string>
     <string name="shared_string_memory_used_mb_desc">Iskoristen %1$s MB</string>
     <string name="shared_string_memory_used_kb_desc">Iskoristen %1$s kB</string>
-    <string name="contour_lines_and_hillshade">Kontrolni linii i planisnki senki</string>
     <string name="update_all_maps">Site karti se azurirani</string>
     <string name="update_all_maps_q">Da se azuriraat site (%1$d) karti\?</string>
     <string name="track_storage_directory">Sledete ja papkata za skladiranje</string>
@@ -1329,7 +1324,6 @@
     <string name="save_global_track_interval_descr">Navedete go intervalot za evidentiranje za opštoto snimanje na pesna (vklučeno preku grafičkata kontrola „Patuvanje snimanje“ na kartata).</string>
     <string name="navigate_to_track_descr">Odete od mojata pozicija do patekata</string>
     <string name="in_case_of_reverse_direction">Vo slučaj na obratna nasoka</string>
-    <string name="quick_action_add_gpx">Dodadete točka na patekata</string>
     <string name="context_menu_item_add_waypoint">Dodadete točka na patekata</string>
     <string name="show_gpx">Trasi</string>
     <string name="navigation_profile">Profil za navigacija</string>
@@ -1337,7 +1331,6 @@
     <string name="gpx_split_interval_descr">Izberete go intervalot vo koj ḱe se prikažuvaat oznakite so rastojanie ili vreme na patekata.</string>
     <string name="add_hidden_group_info">Dodadenata točka može da se najde vo „%s“. Otkrijte ja izbranata grupa za da ja prikažete na kartata.</string>
     <string name="quick_action_remove_next_destination_descr">Ja briše slednata destinacija na vašata maršruta. Ako toa e krajnata destinacija, navigacijata ḱe prestane.</string>
-    <string name="quick_action_remove_next_destination">Izbrišete ja najbliskata destinacija</string>
     <string name="shared_string_tones">toni</string>
     <string name="vessel_height_limit_description">Postavete visina na brodot za da izbegnete niski mostovi. Imajte na um, ako mostot e podvižen, ḱe ja koristime negovata visina vo otvorena sostojba.</string>
     <string name="add_online_source">Dodadete izvor na onlajn</string>
@@ -1498,7 +1491,7 @@
     <string name="rendering_attr_piste_difficulty_undefined_name">Nedefinirano</string>
     <string name="routeInfo_piste_difficulty_name">Teskotii na patekata</string>
     <string name="shared_string_osmand_usage">OsmAnd upotreba</string>
-    <string name="shared_sting_tiles">Plocki</string>
+    <string name="shared_string_tiles">Plocki</string>
     <string name="shared_string_maps">Karti</string>
     <string name="shared_string_memory_tb_desc">%1$s TB</string>
     <string name="navigate_point_format_olc">Otvorete go kodot za lokacija</string>
@@ -1913,7 +1906,6 @@
     <string name="wikivoyage_offline">Wikivoyage ofline</string>
     <string name="unlimited_downloads">Neograniceni prevzemanja</string>
     <string name="wikipedia_offline">Wikipedia ofline</string>
-    <string name="contour_lines_hillshade_maps">Konturni linii i karti na ridovi</string>
     <string name="unlock_all_features">Otklučete gi site funkcii na OsmAnd</string>
     <string name="purchase_dialog_travel_description">Kupete edno od slednive za da ja dobiete funkcionalnosta za oflajn vodič za patuvanje:</string>
     <string name="shared_string_dont">Nemoj</string>
@@ -2091,7 +2083,7 @@
     <string name="quick_action_show_navigation_finish_dialog">Prikaži go dijalogot „Navigacijata e završena“</string>
     <string name="quick_action_start_stop_navigation_descr">Kopče za započnuvanje ili završuvanje na navigacijata.</string>
     <string name="store_tracks_in_monthly_directories">Čuvajte gi snimenite zapisi vo mesečni papki</string>
-    <string name="mapillary_menu_title_dates">Datum</string>
+    <string name="shared_string_date">Datum</string>
     <string name="mapillary_menu_edit_text_hint">Napisete korisničko ime</string>
     <string name="mapillary_menu_filter_description">Filtrirajte gi slikite po podnositel, po datum ili po tip. Aktivni samo pri zumiranje odblisku.</string>
     <string name="mapillary_menu_title_pano">Prikažuvajte samo sliki od 360°</string>
@@ -2115,8 +2107,6 @@
     <string name="quick_action_auto_zoom">Vklučuvanje/isklučuvanje na mapata za avtomatsko zumiranje</string>
     <string name="quick_action_add_destination_desc">Kopče za da se napravi ekranot vo centarot na destinacijata na rutata, prethodno izbranata destinacija ḱe stane poslednata sredna destinacija.</string>
     <string name="quick_action_directions_from_desc">Kopče za da se napravi ekranot vo centarot na pojdovnata točka. Potoa ḱe pobara da postavite destinacija ili da ja aktivirate presmetkata na maršrutata.</string>
-    <string name="quick_action_replace_destination">Zameni ja destinacijata</string>
-    <string name="quick_action_add_first_intermediate">Dodadi prvo sredno</string>
     <string name="quick_action_add_first_intermediate_desc">Kopče za da go napravi ekranot centar na prvata sredna destinacija.</string>
     <string name="no_underlay">Bez podloga</string>
     <string name="subscribe_email_error">Greska</string>
@@ -2279,7 +2269,6 @@
     <string name="select_postcode">Baraj postanski kod</string>
     <string name="quick_action_auto_zoom_desc">Kopče za vklučuvanje ili isklučuvanje na avtomatskoto zumiranje so kontrolirana brzina.</string>
     <string name="quick_action_auto_zoom_on">Vklučete avtomatsko zumiranje</string>
-    <string name="quick_action_add_destination">Postavi destinacija</string>
     <string name="subscribe_email_desc">Pretplatete se na našata mejling lista za popusti za aplikacii i dobijte ušte 3 prevzemanja na karti!</string>
     <string name="sea_depth_thanks">Vi blagodarime što kupivte „Konturi za pomorska dlabočina“</string>
     <string name="index_item_depth_contours_osmand_ext">Konturi za pomorska dlabočina</string>
@@ -2414,7 +2403,7 @@
     <string name="search_location">Baranje za lokacija…</string>
     <string name="storage_free_space">Sloboden prostor</string>
     <string name="storage_place_description">Skladiranje podatoci na OsmAnd (za karti, datoteki so pesni itn.): %1$s.</string>
-    <string name="give_permission">Dozvola za donacija (grant)</string>
+    <string name="give_permission">Dozvole</string>
     <string name="allow_access_location">Dozvolete pristap na lokacija</string>
     <string name="first_usage_greeting">Dobijte nasoki i otkrijte novi mesta bez internet konekcija</string>
     <string name="routing_attr_short_way_name">Efikasen način za gorivo</string>
@@ -2667,7 +2656,6 @@
     <string name="region_maps">Karti niz celiot region</string>
     <string name="world_maps">Svetski karti</string>
     <string name="hillshade_layer_disabled">Slojot na ridovi e onevozmožen</string>
-    <string name="srtm_plugin_disabled">Onevozmozeni konturni linii</string>
     <string name="favorite_category_add_new">Dodadi nov</string>
     <string name="favorite_category_select">Izberi kategorija</string>
     <string name="marker_2nd">Vtor marker</string>
@@ -3192,11 +3180,8 @@
     <string name="av_settings_descr">Postavete postavki za audio i video.</string>
     <string name="av_settings">Postavki za audio/video</string>
     <string name="map_widget_av_notes">Audio/video zabeleski</string>
-    <string name="index_srtm_parts">delovi</string>
-    <string name="index_srtm_ele">Konturni linii</string>
     <string name="download_select_map_types">Drugi karti</string>
     <string name="download_roads_only_maps">Patista-samo karta</string>
-    <string name="rendering_attr_alpineHiking_description">Avtomatski iscrtani karti spored скалата SAC.</string>
     <string name="rendering_attr_noAdminboundaries_name">Granici</string>
     <string name="rendering_attr_noAdminboundaries_description">Potisnete go prikazot na regionalnite granici (administratorsko nivo 5–9).</string>
     <string name="map_widget_max_speed">Ogranici brzina</string>
@@ -3480,7 +3465,6 @@
     <string name="download_roads_only_item">Samo patista</string>
     <string name="download_srtm_maps">Konturni linii</string>
     <string name="download_regular_maps">Standardna karta</string>
-    <string name="rendering_attr_alpineHiking_name">Alpska skala za planinarenje (SAC)</string>
     <string name="rendering_attr_hikingRoutesOSMC_name">Plainarski marsruti</string>
     <string name="rendering_attr_hikingRoutesOSMC_description">Avtomatski iscrtani karti spored OSMC tragite.</string>
     <string name="zxing_barcode_scanner_not_found">Aplikacijata ZXing Barcode Scanner ne e instalirana. Baraj vo Google Play\?</string>
@@ -3598,7 +3582,6 @@
     <string name="driving_region_us">SAD</string>
     <string name="driving_region_europe_asia">Evropa, Azija, Latinska Amerika i slično</string>
     <string name="driving_region_canada">Kanada</string>
-    <string name="driving_region_uk">UK, India i slicno</string>
     <string name="driving_region_australia">Avstralija</string>
     <string name="speak_title">Objavete…</string>
     <string name="speak_descr">Postavete objavuvanje na iminja na ulici, soobraḱajni predupreduvanja (prisilni zapiranja, udari so brzina), predupreduvanja za kameri za brzina i ograničuvanja na brzinata.</string>
@@ -4476,10 +4459,6 @@
     <string name="configure_screen_quick_action">Brzo dejstvie</string>
     <string name="quick_action_item_action">Dejstvie %d</string>
     <string name="quick_action_item_screen">Ekran %d</string>
-    <string name="quick_action_take_audio_note">Nova audio beleška</string>
-    <string name="quick_action_take_video_note">Nova video beleška</string>
-    <string name="quick_action_take_photo_note">Nova foto beleška</string>
-    <string name="quick_action_add_osm_bug">Dodadete OSM beleska</string>
     <string name="quick_action_new_action">Dodadete dejstvie</string>
     <string name="quick_favorites_name_preset">Prethodno postaveno ime</string>
     <string name="quick_action_take_video_note_descr">Kopče za dodavanje video beleška na sredinata na ekranot.</string>
@@ -4519,10 +4498,8 @@
     <string name="last_map_change">Последна промена на картата: %s</string>
     <string name="number_of_contributors">Broj na sorabotnici</string>
     <string name="number_of_edits">Broj na ureduvanja</string>
-    <string name="quick_action_add_parking">Dodadete mesto za parkiranje</string>
     <string name="quick_actions_delete_text">Da se izbriše dejstvieto „%s“\?</string>
     <string name="quick_action_edit_action">Uredete go dejstvieto</string>
-    <string name="quick_action_add_favorite">Dodadete omilen</string>
     <string name="dialog_add_action_title">Dodadete dejstvie</string>
     <string name="quick_action_add_marker_descr">Kopče za dodavanje marker na mapa na lokacijata vo centarot na ekranot.</string>
     <string name="quick_action_add_gpx_descr">Kopče za dodavanje na GPX točka na sredinata na ekranot.</string>
@@ -4530,7 +4507,6 @@
     <string name="quick_action_navigation_voice_descr">Prekinuvač za onevozmožuvanje ili ovozmožuvanje glasovno vodenje za vreme na navigacijata.</string>
     <string name="quick_action_switch_day_night_descr">Prefrlanje za prefrlanje pomeǵu dnevnite i noḱnite režimi za OsmAnd.</string>
     <string name="quick_action_map_overlay_switch">Preklopuvanjeto na kartata e smeneto vo „%s“.</string>
-    <string name="quick_action_map_underlay">Promenete ja podlogata na kartata</string>
     <string name="touring_view_renderer">Pogled na patuvanjeto</string>
     <string name="routing_attr_allow_intermediate_description">Poteški pravci so poostri delnici. Generalno nekoi prečki što treba da se izbegnuvaat.</string>
     <string name="routing_attr_difficulty_preference_name">Pretpočitana teškotija</string>
@@ -4618,10 +4594,7 @@
     <string name="last_update">Posledno ažuriranje: %s</string>
     <string name="dashboard_or_drawer_description">Ponuden e izbor primarno da se kontrolira aplikacijata preku fleksibilnata kontrolna tabla ili statičnoto meni. Vašiot izbor sekogaš može da se promeni vo postavkite na kontrolnata tabla.</string>
     <string name="update_time">Vreme na ažuriranje</string>
-    <string name="quick_action_map_style">Promenete go stilot na kartata</string>
     <string name="quick_action_map_style_switch">Stilot na kartata e promenet vo „%s“.</string>
-    <string name="quick_action_add_marker">Dodadete marker na karta</string>
-    <string name="quick_action_add_poi">Dodadete POI</string>
     <string name="quick_favorites_show_favorites_dialog">Prikaži dijalog za omileni</string>
     <string name="quick_action_take_audio_note_descr">Kopče za dodavanje audio beleška na sredinata na ekranot.</string>
     <string name="quick_action_interim_dialog">Prikaži privremen dijalog</string>
@@ -4650,7 +4623,6 @@
     <string name="quick_action_page_list_descr">Kopče za stranica niz spisokot podolu.</string>
     <string name="quick_action_empty_param_error">Popolnete gi site parametri</string>
     <string name="quick_action_map_styles">Stilovi na karta</string>
-    <string name="quick_action_map_overlay">Promenete go preklopuvanjeto na kartata</string>
     <string name="waypoint_one">Patna točka 1</string>
     <string name="route_point_one">Točka 1 na rutata</string>
     <string name="empty_state_favourites">Dodadete omileni</string>
@@ -4686,10 +4658,9 @@
     <string name="voice_prompts_timetable">Vreminja na glasovni izvestuvanja</string>
     <string name="routing_attr_freeride_policy_description">„Freeride“ i „Off-piste“ se neoficijalni pravci i premini. Tipično neguvani, neodržuvani i ne provereni navečer. Vlezete na vaš sopstven rizik.</string>
     <string name="amenity_type_shop">Prodavnica</string>
-    <string name="contact_us">Kontakt</string>
+    <string name="shared_string_contact">Kontakt</string>
     <string name="quick_action_map_underlay_title">Podlogi na kartata</string>
     <string name="quick_action_map_underlay_action">Dodadete podloga</string>
-    <string name="quick_action_map_source">Promenete go izvorot na kartata</string>
     <string name="quick_action_map_source_title">Izvori na kartata</string>
     <string name="quick_action_map_source_action">Dodadete izvor na kartata</string>
     <string name="quick_action_map_source_switch">Izvorot na kartata e promenet vo „%s“.</string>
