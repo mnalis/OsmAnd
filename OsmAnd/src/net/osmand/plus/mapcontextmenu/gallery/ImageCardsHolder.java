@@ -3,6 +3,7 @@ package net.osmand.plus.mapcontextmenu.gallery;
 import static net.osmand.plus.mapcontextmenu.gallery.ImageCardType.MAPILLARY;
 import static net.osmand.plus.mapcontextmenu.gallery.ImageCardType.MAPILLARY_AMENITY;
 import static net.osmand.plus.mapcontextmenu.gallery.ImageCardType.OTHER;
+import static net.osmand.plus.mapcontextmenu.gallery.ImageCardType.PANORAMAX;
 import static net.osmand.plus.mapcontextmenu.gallery.ImageCardType.WIKIDATA;
 import static net.osmand.plus.mapcontextmenu.gallery.ImageCardType.WIKIMEDIA;
 
@@ -40,7 +41,7 @@ public class ImageCardsHolder {
 
 	@NonNull
 	public List<ImageCard> getOrderedCards() {
-		return getCardsWithTypes(OTHER, MAPILLARY_AMENITY, WIKIDATA, WIKIMEDIA);
+		return getCardsWithTypes(OTHER, MAPILLARY_AMENITY, WIKIDATA, WIKIMEDIA, PANORAMAX);
 	}
 
 	@NonNull

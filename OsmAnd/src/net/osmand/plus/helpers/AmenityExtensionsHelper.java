@@ -2,6 +2,7 @@ package net.osmand.plus.helpers;
 
 import static net.osmand.binary.BinaryMapIndexReader.ACCEPT_ALL_POI_TYPE_FILTER;
 import static net.osmand.data.Amenity.MAPILLARY;
+import static net.osmand.data.Amenity.PANORAMAX;
 import static net.osmand.data.Amenity.WIKIDATA;
 import static net.osmand.data.Amenity.WIKIMEDIA_COMMONS;
 import static net.osmand.data.Amenity.WIKIPEDIA;
@@ -78,7 +79,7 @@ public class AmenityExtensionsHelper {
 	@NonNull
 	public static Map<String, String> getImagesParams(@NonNull Map<String, String> extensions) {
 		Map<String, String> params = new HashMap<>();
-		List<String> imageTags = Arrays.asList("image", MAPILLARY, WIKIDATA, WIKIPEDIA, WIKIMEDIA_COMMONS);
+		List<String> imageTags = Arrays.asList("image", MAPILLARY, WIKIDATA, WIKIPEDIA, WIKIMEDIA_COMMONS, PANORAMAX);
 		for (String imageTag : imageTags) {
 			String value = extensions.get(imageTag);
 			if (!Algorithms.isEmpty(value)) {
